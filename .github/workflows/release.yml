@@ -1,43 +1,84 @@
 name: Release APKs
 
 on:
-  push:
-    tags: [ 'v*' ]
+  workflow_run:
+    workflows: ["Android CI"]
+    types: [completed]
   workflow_dispatch:
 
 permissions:
   contents: write
+  actions: read
 
 jobs:
   release:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main')
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    env:
+      GH_TOKEN: ${{ github.token }}
     steps:
+      - name: Check whether V0.0.1 already exists
+        id: release_check
+        run: |
+          if gh release view v0.0.1 --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Resolve source revision
+        id: source
+        if: steps.release_check.outputs.exists != 'true'
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_run" ]; then
+            echo "sha=${{ github.event.workflow_run.head_sha }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "sha=${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
+          fi
+
       - uses: actions/checkout@v4
+        if: steps.release_check.outputs.exists != 'true'
+        with:
+          ref: ${{ steps.source.outputs.sha }}
+
       - uses: actions/setup-java@v4
+        if: steps.release_check.outputs.exists != 'true'
         with:
           distribution: temurin
           java-version: '17'
+
       - uses: gradle/actions/setup-gradle@v4
+        if: steps.release_check.outputs.exists != 'true'
         with:
           gradle-version: '8.9'
-      - name: Test and lint
+
+      - name: Re-run release gate
+        if: steps.release_check.outputs.exists != 'true'
         run: gradle :core:test :app:testArm32DebugUnitTest :app:testArm64DebugUnitTest :app:lintArm32Debug :app:lintArm64Debug --stacktrace
+
       - name: Build APKs
+        if: steps.release_check.outputs.exists != 'true'
         run: |
           gradle :app:assembleArm32Release :app:assembleArm64Release --stacktrace
           mkdir -p release
           cp app/build/outputs/apk/arm32/release/app-arm32-release.apk release/Heart-Rate-Strap-Companion-v0.0.1-arm32.apk
           cp app/build/outputs/apk/arm64/release/app-arm64-release.apk release/Heart-Rate-Strap-Companion-v0.0.1-arm64.apk
-      - name: Publish GitHub Release
-        if: startsWith(github.ref, 'refs/tags/')
+
+      - name: Publish GitHub Release V0.0.1
+        if: steps.release_check.outputs.exists != 'true'
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: v0.0.1
+          target_commitish: ${{ steps.source.outputs.sha }}
           files: release/*.apk
           name: V0.0.1
           body: |
             V0.0.1
-            - 实现标准 BLE 心率带连接与持续记录。
-            - 实现实时心率、1 小时可滑动曲线、悬浮窗和历史详情。
+            - 实现标准 BLE Heart Rate Service 心率带连接与持续记录。
+            - 实现实时心率、最新 1 小时可滑动曲线、边缘回弹、绿色渐变、悬浮窗和历史详情。
             - 骑行记录暂未开发。
-            - APK 当前使用 CI 默认/开发签名流程，不包含仓库内生产签名私钥。
+            - 同时提供 arm32 (armeabi-v7a) 与 arm64 (arm64-v8a) APK。
+            - 当前构建不在公开仓库保存生产签名私钥；正式长期分发应改用 GitHub Secrets 注入固定 release keystore。
