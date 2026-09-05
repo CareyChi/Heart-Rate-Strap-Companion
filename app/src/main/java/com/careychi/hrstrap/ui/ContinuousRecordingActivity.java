@@ -153,7 +153,7 @@ public final class ContinuousRecordingActivity extends AppCompatActivity impleme
         if (id != loadedSessionId) {
             loadedSessionId = id;
             lastLoadedTimestamp = 0;
-            chart.setPoints(List.of());
+            chart.setPoints(Collections.emptyList());
         }
         queryInFlight = true;
         long from = lastLoadedTimestamp == 0 ? 0 : lastLoadedTimestamp + 1;
