@@ -8,7 +8,6 @@ import android.bluetooth.le.*;
 import android.content.*;
 import android.content.pm.PackageManager;
 import android.os.*;
-import android.provider.Settings;
 import android.view.*;
 import android.widget.*;
 import androidx.activity.result.ActivityResultLauncher;
@@ -129,7 +128,7 @@ public final class MainActivity extends AppCompatActivity implements HeartRateSt
     }
 
     private void maybeShowFirstRunGuide() {
-        var prefs = getSharedPreferences("onboarding", MODE_PRIVATE);
+        android.content.SharedPreferences prefs = getSharedPreferences("onboarding", MODE_PRIVATE);
         if (prefs.getBoolean("shown", false)) return;
         prefs.edit().putBoolean("shown", true).apply();
         new AlertDialog.Builder(this)
@@ -149,7 +148,7 @@ public final class MainActivity extends AppCompatActivity implements HeartRateSt
             list.add(Manifest.permission.ACCESS_FINE_LOCATION);
         }
         if (Build.VERSION.SDK_INT >= 33 && ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) list.add(Manifest.permission.POST_NOTIFICATIONS);
-        if (!list.isEmpty()) permissions.launch(list.toArray(String[]::new));
+        if (!list.isEmpty()) permissions.launch(list.toArray(new String[0]));
     }
 
     @SuppressLint("MissingPermission")
@@ -166,8 +165,8 @@ public final class MainActivity extends AppCompatActivity implements HeartRateSt
         status.setText("正在扫描心率带…");
         ScanFilter filter = new ScanFilter.Builder().setServiceUuid(HR_SERVICE).build();
         ScanSettings settings = new ScanSettings.Builder().setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY).build();
-        scanner.startScan(List.of(filter), settings, scanCallback);
-        handler.postDelayed(() -> finishScanAndChoose(), 6000);
+        scanner.startScan(Collections.singletonList(filter), settings, scanCallback);
+        handler.postDelayed(this::finishScanAndChoose, 6000);
     }
 
     private final ScanCallback scanCallback = new ScanCallback() {
@@ -193,7 +192,7 @@ public final class MainActivity extends AppCompatActivity implements HeartRateSt
         for (int i = 0; i < results.size(); i++) {
             ScanResult r = results.get(i);
             String name = r.getDevice().getName();
-            if (name == null || name.isBlank()) name = "未命名心率带";
+            if (name == null || name.trim().isEmpty()) name = "未命名心率带";
             names[i] = name + "  ·  " + r.getRssi() + " dBm";
         }
         new AlertDialog.Builder(this).setTitle("选择心率带")
@@ -204,7 +203,7 @@ public final class MainActivity extends AppCompatActivity implements HeartRateSt
     @SuppressLint("MissingPermission")
     private void connect(ScanResult result) {
         String name = result.getDevice().getName();
-        if (name == null || name.isBlank()) name = "心率带";
+        if (name == null || name.trim().isEmpty()) name = "心率带";
         Intent service = new Intent(this, HeartRateService.class)
                 .setAction(HeartRateService.ACTION_CONNECT)
                 .putExtra(HeartRateService.EXTRA_ADDRESS, result.getDevice().getAddress())
