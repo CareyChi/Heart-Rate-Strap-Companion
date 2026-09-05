@@ -22,14 +22,13 @@ public final class HeartRateChartView extends View {
     private final Path linePath = new Path();
     private final Path fillPath = new Path();
     private final SimpleDateFormat timeFormat = new SimpleDateFormat("HH:mm", Locale.getDefault());
-    private List<Point> points = List.of();
+    private List<Point> points = Collections.emptyList();
     private long viewStartMs = 0;
     private long dataStartMs = 0;
     private long dataEndMs = 0;
     private boolean followingLatest = true;
     private float downX;
     private long downStart;
-    private boolean dragging;
     private ValueAnimator rebound;
 
     public HeartRateChartView(Context context) {
@@ -47,7 +46,7 @@ public final class HeartRateChartView extends View {
     }
 
     public void setPoints(List<Point> next) {
-        points = next == null ? List.of() : List.copyOf(next);
+        points = next == null ? Collections.emptyList() : new ArrayList<>(next);
         if (!points.isEmpty()) {
             dataStartMs = points.get(0).timestampMs();
             dataEndMs = points.get(points.size() - 1).timestampMs();
@@ -150,13 +149,11 @@ public final class HeartRateChartView extends View {
                 if (rebound != null) rebound.cancel();
                 downX = e.getX();
                 downStart = viewStartMs;
-                dragging = false;
                 getParent().requestDisallowInterceptTouchEvent(true);
                 return true;
             }
             case MotionEvent.ACTION_MOVE -> {
                 float dx = e.getX() - downX;
-                if (Math.abs(dx) > Ui.dp(getContext(), 5)) dragging = true;
                 long delta = (long) (-dx / Math.max(1f, getWidth()) * WINDOW_MS);
                 long proposed = downStart + delta;
                 long min = minStart();
