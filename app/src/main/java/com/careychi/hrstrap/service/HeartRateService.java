@@ -16,7 +16,6 @@ import androidx.core.app.ActivityCompat;
 import androidx.core.app.NotificationCompat;
 import com.careychi.hrstrap.AppVisibility;
 import com.careychi.hrstrap.HeartRateState;
-import com.careychi.hrstrap.R;
 import com.careychi.hrstrap.core.HeartRateAxis;
 import com.careychi.hrstrap.core.HeartRateMeasurementParser;
 import com.careychi.hrstrap.data.*;
@@ -161,9 +160,9 @@ public final class HeartRateService extends Service implements AppVisibility.Lis
 
     @SuppressLint("MissingPermission")
     private void connect(String address, String name) {
-        if (address == null || address.isBlank()) return;
+        if (address == null || address.trim().isEmpty()) return;
         if (Build.VERSION.SDK_INT >= 31 && ActivityCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) return;
-        requestedName = (name == null || name.isBlank()) ? "心率带" : name;
+        requestedName = (name == null || name.trim().isEmpty()) ? "心率带" : name;
         closeGatt();
         BluetoothManager manager = getSystemService(BluetoothManager.class);
         if (manager == null || manager.getAdapter() == null) return;
@@ -294,7 +293,7 @@ public final class HeartRateService extends Service implements AppVisibility.Lis
 
         overlayParams = new WindowManager.LayoutParams(
                 Ui.dp(this, 230), Ui.dp(this, 150),
-                Build.VERSION.SDK_INT >= 26 ? WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY : WindowManager.LayoutParams.TYPE_PHONE,
+                WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
                 WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
                 PixelFormat.TRANSLUCENT);
         overlayParams.gravity = Gravity.TOP | Gravity.START;
