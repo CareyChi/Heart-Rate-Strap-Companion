@@ -20,8 +20,25 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
     steps:
+      - name: Verify tested revision is still current main
+        id: freshness
+        run: |
+          CURRENT_SHA="$(gh api "repos/${GITHUB_REPOSITORY}/commits/main" --jq '.sha')"
+          if [ "${{ github.event_name }}" = "workflow_run" ]; then
+            TESTED_SHA="${{ github.event.workflow_run.head_sha }}"
+          else
+            TESTED_SHA="$CURRENT_SHA"
+          fi
+          echo "sha=$TESTED_SHA" >> "$GITHUB_OUTPUT"
+          if [ "$CURRENT_SHA" = "$TESTED_SHA" ]; then
+            echo "current=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "current=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Check whether V0.0.1 already exists
         id: release_check
+        if: steps.freshness.outputs.current == 'true'
         run: |
           if gh release view v0.0.1 --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
             echo "exists=true" >> "$GITHUB_OUTPUT"
@@ -29,38 +46,28 @@ jobs:
             echo "exists=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Resolve source revision
-        id: source
-        if: steps.release_check.outputs.exists != 'true'
-        run: |
-          if [ "${{ github.event_name }}" = "workflow_run" ]; then
-            echo "sha=${{ github.event.workflow_run.head_sha }}" >> "$GITHUB_OUTPUT"
-          else
-            echo "sha=${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
-          fi
-
       - uses: actions/checkout@v4
-        if: steps.release_check.outputs.exists != 'true'
+        if: steps.freshness.outputs.current == 'true' && steps.release_check.outputs.exists != 'true'
         with:
-          ref: ${{ steps.source.outputs.sha }}
+          ref: ${{ steps.freshness.outputs.sha }}
 
       - uses: actions/setup-java@v4
-        if: steps.release_check.outputs.exists != 'true'
+        if: steps.freshness.outputs.current == 'true' && steps.release_check.outputs.exists != 'true'
         with:
           distribution: temurin
           java-version: '17'
 
       - uses: gradle/actions/setup-gradle@v4
-        if: steps.release_check.outputs.exists != 'true'
+        if: steps.freshness.outputs.current == 'true' && steps.release_check.outputs.exists != 'true'
         with:
           gradle-version: '8.9'
 
       - name: Re-run release gate
-        if: steps.release_check.outputs.exists != 'true'
+        if: steps.freshness.outputs.current == 'true' && steps.release_check.outputs.exists != 'true'
         run: gradle :core:test :app:testArm32DebugUnitTest :app:testArm64DebugUnitTest :app:lintArm32Debug :app:lintArm64Debug --stacktrace
 
       - name: Build APKs
-        if: steps.release_check.outputs.exists != 'true'
+        if: steps.freshness.outputs.current == 'true' && steps.release_check.outputs.exists != 'true'
         run: |
           gradle :app:assembleArm32Release :app:assembleArm64Release --stacktrace
           mkdir -p release
@@ -68,11 +75,11 @@ jobs:
           cp app/build/outputs/apk/arm64/release/app-arm64-release.apk release/Heart-Rate-Strap-Companion-v0.0.1-arm64.apk
 
       - name: Publish GitHub Release V0.0.1
-        if: steps.release_check.outputs.exists != 'true'
+        if: steps.freshness.outputs.current == 'true' && steps.release_check.outputs.exists != 'true'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v0.0.1
-          target_commitish: ${{ steps.source.outputs.sha }}
+          target_commitish: ${{ steps.freshness.outputs.sha }}
           files: release/*.apk
           name: V0.0.1
           body: |
@@ -81,4 +88,4 @@ jobs:
             - 实现实时心率、最新 1 小时可滑动曲线、边缘回弹、绿色渐变、悬浮窗和历史详情。
             - 骑行记录暂未开发。
             - 同时提供 arm32 (armeabi-v7a) 与 arm64 (arm64-v8a) APK。
-            - 当前构建不在公开仓库保存生产签名私钥；正式长期分发应改用 GitHub Secrets 注入固定 release keystore。
+            - 当前构建使用开发签名以保证 APK 可直接安装；正式长期分发应改用 GitHub Secrets 注入固定 release keystore。
