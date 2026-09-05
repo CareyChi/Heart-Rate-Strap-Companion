@@ -17,8 +17,9 @@ public final class ContinuousRecordingActivity extends AppCompatActivity impleme
     private final Handler main = new Handler(Looper.getMainLooper());
     private final ExecutorService dbExecutor = Executors.newSingleThreadExecutor();
     private TripleDigitView bpmDigits;
+    private TripleDigitView maxDigits;
+    private TripleDigitView avgDigits;
     private TextView deviceName;
-    private TextView summary;
     private HeartRateChartView chart;
     private MaterialButton stopButton;
     private long loadedSessionId;
@@ -79,9 +80,13 @@ public final class ContinuousRecordingActivity extends AppCompatActivity impleme
         hero.addView(bpm);
         root.addView(hero, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, Ui.dp(this, 180)));
 
-        summary = Ui.text(this, "最大 ---   ·   平均 ---", 13, Ui.MUTED);
-        summary.setGravity(Gravity.CENTER);
-        root.addView(summary, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, Ui.dp(this, 42)));
+        LinearLayout metrics = Ui.row(this);
+        metrics.setGravity(Gravity.CENTER);
+        metrics.addView(metric("最大", true));
+        Space metricGap = new Space(this);
+        metrics.addView(metricGap, new LinearLayout.LayoutParams(Ui.dp(this, 28), 1));
+        metrics.addView(metric("平均", false));
+        root.addView(metrics, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, Ui.dp(this, 54)));
 
         chart = new HeartRateChartView(this);
         chart.setBackground(Ui.rounded(Ui.SURFACE, 22, this));
@@ -100,6 +105,18 @@ public final class ContinuousRecordingActivity extends AppCompatActivity impleme
         attachHoldToStop();
         root.addView(stopButton, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, Ui.dp(this, 60)));
         setContentView(root);
+    }
+
+    private View metric(String label, boolean maximum) {
+        LinearLayout box = Ui.row(this);
+        TextView labelView = Ui.text(this, label + " ", 13, Ui.MUTED);
+        box.addView(labelView);
+        TripleDigitView digits = new TripleDigitView(this, 16);
+        digits.setUnavailable();
+        if (maximum) maxDigits = digits; else avgDigits = digits;
+        box.addView(digits);
+        box.addView(Ui.text(this, " bpm", 11, Ui.MUTED));
+        return box;
     }
 
     private void attachHoldToStop() {
@@ -125,8 +142,7 @@ public final class ContinuousRecordingActivity extends AppCompatActivity impleme
     private final Runnable pressProgress = new Runnable() {
         @Override public void run() {
             long elapsed = SystemClock.uptimeMillis() - pressStartedAt;
-            int percent = (int) Math.min(100, elapsed * 100 / 900);
-            stopButton.setText("按住停止  " + percent + "%");
+            stopButton.setText(elapsed < 450 ? "继续按住以停止" : "即将停止…");
             if (elapsed >= 900 && !stopTriggered) {
                 stopTriggered = true;
                 stopButton.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);
@@ -180,8 +196,13 @@ public final class ContinuousRecordingActivity extends AppCompatActivity impleme
     @Override public void onState(HeartRateState.State s) {
         deviceName.setText(s.deviceName());
         if (s.latestBpm() > 0) bpmDigits.setValue(s.latestBpm()); else bpmDigits.setUnavailable();
-        if (s.maxBpm() > 0) summary.setText("最大 " + s.maxBpm() + "   ·   平均 " + s.avgBpm());
-        else summary.setText("最大 ---   ·   平均 ---");
+        if (s.maxBpm() > 0) {
+            maxDigits.setValue(s.maxBpm());
+            avgDigits.setValue(s.avgBpm());
+        } else {
+            maxDigits.setUnavailable();
+            avgDigits.setUnavailable();
+        }
         if (s.recording()) everRecording = true;
         if (everRecording && !s.recording() && !stopTriggered) finish();
     }
