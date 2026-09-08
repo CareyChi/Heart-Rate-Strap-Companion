@@ -30,12 +30,16 @@ public final class Ui {
 
     private Ui() {}
 
-    /** Switches every UI background role between pure black and the app's existing defaults. */
+    /**
+     * Pure-black mode changes the page canvas to true black while preserving gray card/component
+     * surfaces so their boundaries remain visible. Overlay black is handled independently by the
+     * overlay service because it intentionally differs from card surfaces.
+     */
     public static synchronized void applyPureBlackBackground(boolean enabled) {
         if (enabled) {
             BG = Color.BLACK;
-            SURFACE = Color.BLACK;
-            SURFACE_2 = Color.BLACK;
+            SURFACE = DEFAULT_SURFACE;
+            SURFACE_2 = DEFAULT_SURFACE_2;
             BUTTON_BG = Color.BLACK;
             ICON_BUTTON_BG = Color.BLACK;
         } else {
