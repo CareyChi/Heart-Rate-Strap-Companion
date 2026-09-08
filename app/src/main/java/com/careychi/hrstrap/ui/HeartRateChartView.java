@@ -69,10 +69,10 @@ public final class HeartRateChartView extends View {
 
     @Override protected void onDraw(Canvas canvas) {
         super.onDraw(canvas);
-        int left = Ui.dp(getContext(), 48);
-        int top = Ui.dp(getContext(), 16);
+        int left = Ui.dp(getContext(), 42);
+        int top = Ui.dp(getContext(), 24);
         int right = getWidth() - Ui.dp(getContext(), 12);
-        int bottom = getHeight() - Ui.dp(getContext(), 30);
+        int bottom = getHeight() - Ui.dp(getContext(), 38);
         if (right <= left || bottom <= top) return;
 
         int max = 0;
@@ -96,7 +96,7 @@ public final class HeartRateChartView extends View {
             float y = yFor(value, bands.maxBand(), top, bottom);
             canvas.drawLine(left, y, right, y, grid);
             String text = Integer.toString(value);
-            canvas.drawText(text, left - Ui.dp(getContext(), 8) - axisText.measureText(text), y + Ui.dp(getContext(), 4), axisText);
+            canvas.drawText(text, left - Ui.dp(getContext(), 6) - axisText.measureText(text), y + Ui.dp(getContext(), 4), axisText);
         }
 
         long end = viewStartMs + WINDOW_MS;
@@ -105,7 +105,7 @@ public final class HeartRateChartView extends View {
             float x = left + (right - left) * i / 4f;
             String label = timeFormat.format(new Date(t));
             float tw = axisText.measureText(label);
-            canvas.drawText(label, Math.max(left, Math.min(right - tw, x - tw / 2f)), getHeight() - Ui.dp(getContext(), 8), axisText);
+            canvas.drawText(label, Math.max(left, Math.min(right - tw, x - tw / 2f)), getHeight() - Ui.dp(getContext(), 12), axisText);
         }
 
         linePath.reset();
