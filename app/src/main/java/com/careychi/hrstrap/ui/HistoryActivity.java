@@ -45,8 +45,11 @@ public final class HistoryActivity extends AppCompatActivity {
         page.addView(top);
 
         ScrollView scroll = new ScrollView(this);
+        scroll.setVerticalScrollBarEnabled(false);
+        scroll.setOverScrollMode(View.OVER_SCROLL_NEVER);
         list = Ui.column(this);
-        list.setPadding(0, Ui.dp(this, 12), 0, Ui.dp(this, 30));
+        int bottomSpace = Math.max(Ui.dp(this, 180), getResources().getDisplayMetrics().heightPixels / 2);
+        list.setPadding(0, Ui.dp(this, 12), 0, bottomSpace);
         scroll.addView(list, new ScrollView.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         page.addView(scroll, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1));
         setContentView(page);
