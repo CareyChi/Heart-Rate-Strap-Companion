@@ -10,7 +10,6 @@ import android.graphics.PixelFormat;
 import android.os.*;
 import android.provider.Settings;
 import android.view.*;
-import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 import androidx.core.app.ActivityCompat;
@@ -61,9 +60,7 @@ public final class HeartRateService extends Service implements AppVisibility.Lis
     private View overlay;
     private WindowManager.LayoutParams overlayParams;
     private TripleDigitView overlayBpm;
-    private TripleDigitView overlayMax;
-    private TripleDigitView overlayAvg;
-    private TripleDigitView overlayZero;
+    private MiniTrendAxisView miniAxis;
     private MiniTrendView miniTrend;
 
     public static long activeSessionId() { return ActiveSessionHolder.id; }
@@ -338,7 +335,7 @@ public final class HeartRateService extends Service implements AppVisibility.Lis
         windowManager = getSystemService(WindowManager.class);
         if (windowManager == null) return;
         LinearLayout root = Ui.column(this);
-        Ui.pad(root, 12);
+        root.setPadding(Ui.dp(this, 9), Ui.dp(this, 12), Ui.dp(this, 9), Ui.dp(this, 12));
         root.setBackground(Ui.rounded(Ui.SURFACE, 18, this));
         root.setElevation(Ui.dp(this, 12));
 
@@ -351,18 +348,11 @@ public final class HeartRateService extends Service implements AppVisibility.Lis
         root.addView(top, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
         LinearLayout lower = Ui.row(this);
-        FrameLayout axis = new FrameLayout(this);
-        overlayMax = new TripleDigitView(this, 10);
-        overlayAvg = new TripleDigitView(this, 10);
-        overlayZero = new TripleDigitView(this, 10);
-        FrameLayout.LayoutParams maxLp = new FrameLayout.LayoutParams(Ui.dp(this, 32), ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.TOP | Gravity.CENTER_HORIZONTAL);
-        FrameLayout.LayoutParams avgLp = new FrameLayout.LayoutParams(Ui.dp(this, 32), ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.CENTER);
-        FrameLayout.LayoutParams zeroLp = new FrameLayout.LayoutParams(Ui.dp(this, 32), ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL);
-        axis.addView(overlayMax, maxLp);
-        axis.addView(overlayAvg, avgLp);
-        axis.addView(overlayZero, zeroLp);
+        miniAxis = new MiniTrendAxisView(this);
         miniTrend = new MiniTrendView(this);
-        lower.addView(axis, new LinearLayout.LayoutParams(Ui.dp(this, 34), Ui.dp(this, 86)));
+        LinearLayout.LayoutParams axisLp = new LinearLayout.LayoutParams(Ui.dp(this, 27), Ui.dp(this, 86));
+        axisLp.rightMargin = Ui.dp(this, 3);
+        lower.addView(miniAxis, axisLp);
         lower.addView(miniTrend, new LinearLayout.LayoutParams(0, Ui.dp(this, 86), 1));
         root.addView(lower, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, Ui.dp(this, 86)));
 
@@ -385,20 +375,20 @@ public final class HeartRateService extends Service implements AppVisibility.Lis
             try { windowManager.removeView(overlay); } catch (Exception ignored) {}
         }
         overlay = null;
-        overlayBpm = overlayMax = overlayAvg = overlayZero = null;
+        overlayBpm = null;
+        miniAxis = null;
         miniTrend = null;
     }
 
     private void updateOverlayValues(int bpm, int max, int avg) {
         if (overlayBpm == null) return;
         if (bpm > 0) overlayBpm.setValue(bpm); else overlayBpm.setUnavailable();
-        int maxBand = Math.max(25, HeartRateAxis.ceil25(max));
-        int avgBand = Math.max(25, HeartRateAxis.ceil25(avg));
-        maxBand = Math.max(maxBand, avgBand + 25);
-        overlayMax.setValue(maxBand);
-        overlayAvg.setValue(avgBand);
-        overlayZero.setValue(0);
-        if (miniTrend != null && bpm > 0) miniTrend.addValue(bpm);
+        HeartRateAxis.OverlayBands bands = HeartRateAxis.forOverlay(max, avg);
+        if (miniAxis != null) miniAxis.setBands(bands.maxBand(), bands.avgBand());
+        if (miniTrend != null) {
+            miniTrend.setBands(bands.maxBand(), bands.avgBand());
+            if (bpm > 0) miniTrend.addValue(bpm);
+        }
     }
 
     private void attachOverlayTouch(View root) {
