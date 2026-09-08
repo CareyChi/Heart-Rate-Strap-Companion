@@ -7,24 +7,21 @@ import android.widget.*;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.content.ContextCompat;
 import com.careychi.hrstrap.HeartRateState;
-import com.careychi.hrstrap.data.*;
 import com.careychi.hrstrap.service.HeartRateService;
 import com.google.android.material.button.MaterialButton;
-import java.util.*;
-import java.util.concurrent.*;
+import java.util.ArrayList;
+import java.util.List;
 
 public final class ContinuousRecordingActivity extends AppCompatActivity implements HeartRateState.Listener {
     private final Handler main = new Handler(Looper.getMainLooper());
-    private final ExecutorService dbExecutor = Executors.newSingleThreadExecutor();
     private TripleDigitView bpmDigits;
     private TripleDigitView maxDigits;
     private TripleDigitView avgDigits;
     private TextView deviceName;
     private HeartRateChartView chart;
     private MaterialButton stopButton;
-    private long loadedSessionId;
+    private long loadedRecordingStartedAt;
     private long lastLoadedTimestamp;
-    private boolean queryInFlight;
     private boolean everRecording;
     private long pressStartedAt;
     private boolean stopTriggered;
@@ -45,11 +42,6 @@ public final class ContinuousRecordingActivity extends AppCompatActivity impleme
         main.removeCallbacks(chartTicker);
         main.removeCallbacks(pressProgress);
         super.onStop();
-    }
-
-    @Override protected void onDestroy() {
-        dbExecutor.shutdownNow();
-        super.onDestroy();
     }
 
     private void buildUi() {
@@ -164,33 +156,31 @@ public final class ContinuousRecordingActivity extends AppCompatActivity impleme
     };
 
     private void refreshChart() {
-        long id = HeartRateService.activeSessionId();
-        if (id <= 0 || queryInFlight) return;
-        if (id != loadedSessionId) {
-            loadedSessionId = id;
+        HeartRateState.State state = HeartRateState.get().snapshot();
+        if (!state.recording() || state.recordingStartedAtMs() <= 0) return;
+
+        long recordingStartedAt = state.recordingStartedAtMs();
+        if (recordingStartedAt != loadedRecordingStartedAt) {
+            loadedRecordingStartedAt = recordingStartedAt;
             lastLoadedTimestamp = 0;
-            chart.setPoints(Collections.emptyList());
+            chart.setPoints(java.util.Collections.emptyList());
         }
-        queryInFlight = true;
-        long from = lastLoadedTimestamp == 0 ? 0 : lastLoadedTimestamp + 1;
-        dbExecutor.execute(() -> {
-            List<HeartRateSample> samples = from == 0
-                    ? AppDatabase.get(getApplicationContext()).heartRateDao().getSamples(id)
-                    : AppDatabase.get(getApplicationContext()).heartRateDao().getSamplesSince(id, from);
-            main.post(() -> {
-                if (id == loadedSessionId && !samples.isEmpty()) {
-                    ArrayList<HeartRateChartView.Point> existing = new ArrayList<>();
-                    if (from == 0) {
-                        for (HeartRateSample s : samples) existing.add(new HeartRateChartView.Point(s.timestampMs, s.bpm));
-                        chart.setPoints(existing);
-                    } else {
-                        for (HeartRateSample s : samples) chart.append(new HeartRateChartView.Point(s.timestampMs, s.bpm));
-                    }
-                    lastLoadedTimestamp = samples.get(samples.size() - 1).timestampMs;
-                }
-                queryInFlight = false;
-            });
-        });
+
+        List<HeartRateService.LiveSample> samples = HeartRateService.liveSamplesSince(lastLoadedTimestamp);
+        if (samples.isEmpty()) return;
+
+        if (lastLoadedTimestamp == 0) {
+            ArrayList<HeartRateChartView.Point> points = new ArrayList<>(samples.size());
+            for (HeartRateService.LiveSample sample : samples) {
+                points.add(new HeartRateChartView.Point(sample.timestampMs(), sample.bpm()));
+            }
+            chart.setPoints(points);
+        } else {
+            for (HeartRateService.LiveSample sample : samples) {
+                chart.append(new HeartRateChartView.Point(sample.timestampMs(), sample.bpm()));
+            }
+        }
+        lastLoadedTimestamp = samples.get(samples.size() - 1).timestampMs();
     }
 
     @Override public void onState(HeartRateState.State s) {
