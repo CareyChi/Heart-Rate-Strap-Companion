@@ -2,7 +2,6 @@ package com.careychi.hrstrap;
 
 import android.app.Activity;
 import android.app.Application;
-import android.graphics.Color;
 import android.os.Bundle;
 import android.util.Log;
 import android.view.Window;
@@ -12,9 +11,7 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
-import java.util.HashSet;
 import java.util.Locale;
-import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -42,19 +39,24 @@ public final class DisplayBackgroundPolicy {
             "/sys/class/drm/card0-eDP-1/panel_name"
     };
 
-    private static final Set<String> PANEL_PROPERTY_KEYS = new HashSet<>();
-    static {
-        PANEL_PROPERTY_KEYS.add("ro.boot.display_panel");
-        PANEL_PROPERTY_KEYS.add("ro.boot.display.panel");
-        PANEL_PROPERTY_KEYS.add("ro.boot.panel");
-        PANEL_PROPERTY_KEYS.add("ro.vendor.display.panel");
-        PANEL_PROPERTY_KEYS.add("vendor.display.panel");
-        PANEL_PROPERTY_KEYS.add("ro.vendor.display.panel_type");
-        PANEL_PROPERTY_KEYS.add("vendor.display.panel_type");
-        PANEL_PROPERTY_KEYS.add("ro.product.display_panel");
-        PANEL_PROPERTY_KEYS.add("ro.display.panel_type");
-        PANEL_PROPERTY_KEYS.add("persist.vendor.display.panel_type");
-    }
+    private static final String[] PANEL_PROPERTY_KEYS = {
+            "ro.boot.display_panel",
+            "ro.boot.display.panel",
+            "ro.boot.panel",
+            "ro.boot.panel_name",
+            "ro.boot.lcd_panel",
+            "ro.vendor.display.panel",
+            "vendor.display.panel",
+            "ro.vendor.display.panel_name",
+            "vendor.display.panel_name",
+            "ro.vendor.display.panel_type",
+            "vendor.display.panel_type",
+            "ro.product.display_panel",
+            "ro.display.panel_type",
+            "persist.vendor.display.panel_type",
+            "ro.lcd.panel",
+            "ro.hardware.panel"
+    };
 
     private static boolean installed;
 
@@ -98,73 +100,57 @@ public final class DisplayBackgroundPolicy {
             if (!text.isEmpty()) evidence.append('\n').append(text);
         }
 
-        String properties = readPanelProperties();
-        if (!properties.isEmpty()) evidence.append('\n').append(properties);
+        for (String key : PANEL_PROPERTY_KEYS) {
+            String value = readSystemProperty(key);
+            if (!value.isEmpty()) evidence.append('\n').append(value);
+        }
         return classifyPanelDescriptor(evidence.toString());
     }
 
     private static String readSmallTextFile(String path) {
-        File file = new File(path);
-        if (!file.isFile() || !file.canRead()) return "";
+        try {
+            File file = new File(path);
+            if (!file.isFile() || !file.canRead()) return "";
 
-        StringBuilder result = new StringBuilder();
-        try (BufferedReader reader = new BufferedReader(new InputStreamReader(
-                new FileInputStream(file), StandardCharsets.UTF_8))) {
-            char[] buffer = new char[1024];
-            int remaining = 4096;
-            while (remaining > 0) {
-                int count = reader.read(buffer, 0, Math.min(buffer.length, remaining));
-                if (count < 0) break;
-                result.append(buffer, 0, count);
-                remaining -= count;
+            StringBuilder result = new StringBuilder();
+            try (BufferedReader reader = new BufferedReader(new InputStreamReader(
+                    new FileInputStream(file), StandardCharsets.UTF_8))) {
+                char[] buffer = new char[1024];
+                int remaining = 4096;
+                while (remaining > 0) {
+                    int count = reader.read(buffer, 0, Math.min(buffer.length, remaining));
+                    if (count < 0) break;
+                    result.append(buffer, 0, count);
+                    remaining -= count;
+                }
             }
+            return result.toString();
         } catch (Exception ignored) {
             return "";
         }
-        return result.toString();
     }
 
-    private static String readPanelProperties() {
+    private static String readSystemProperty(String key) {
         Process process = null;
-        StringBuilder result = new StringBuilder();
         try {
-            process = new ProcessBuilder("/system/bin/getprop")
+            process = new ProcessBuilder("/system/bin/getprop", key)
                     .redirectErrorStream(true)
                     .start();
-            boolean finished = process.waitFor(350, TimeUnit.MILLISECONDS);
+            boolean finished = process.waitFor(150, TimeUnit.MILLISECONDS);
             if (!finished) {
                 process.destroy();
                 return "";
             }
-
             try (BufferedReader reader = new BufferedReader(new InputStreamReader(
                     process.getInputStream(), StandardCharsets.UTF_8))) {
-                String line;
-                while ((line = reader.readLine()) != null) {
-                    int keyStart = line.indexOf('[');
-                    int keyEnd = line.indexOf(']');
-                    int valueStart = line.indexOf('[', keyEnd + 1);
-                    int valueEnd = line.lastIndexOf(']');
-                    if (keyStart < 0 || keyEnd <= keyStart || valueStart < 0 || valueEnd <= valueStart) continue;
-
-                    String key = line.substring(keyStart + 1, keyEnd).trim().toLowerCase(Locale.ROOT);
-                    if (!isPanelProperty(key)) continue;
-                    String value = line.substring(valueStart + 1, valueEnd).trim();
-                    if (!value.isEmpty()) result.append('\n').append(value);
-                }
+                String value = reader.readLine();
+                return value == null ? "" : value.trim();
             }
         } catch (Exception ignored) {
             return "";
         } finally {
             if (process != null) process.destroy();
         }
-        return result.toString();
-    }
-
-    private static boolean isPanelProperty(String key) {
-        if (PANEL_PROPERTY_KEYS.contains(key)) return true;
-        if (key.contains("density") || key.contains("brightness") || key.contains("refresh")) return false;
-        return key.contains("panel") && (key.contains("display") || key.contains("vendor") || key.contains("boot"));
     }
 
     private static boolean containsAny(String value, String... needles) {
