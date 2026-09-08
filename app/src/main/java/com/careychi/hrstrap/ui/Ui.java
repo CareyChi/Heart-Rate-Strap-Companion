@@ -11,9 +11,11 @@ import android.widget.LinearLayout;
 import android.widget.TextView;
 
 public final class Ui {
-    public static final int BG = Color.rgb(7, 17, 15);
-    public static final int SURFACE = Color.rgb(13, 27, 24);
-    public static final int SURFACE_2 = Color.rgb(19, 38, 33);
+    public static final int BG = Color.rgb(18, 18, 18);
+    public static final int SURFACE = Color.rgb(30, 30, 30);
+    public static final int SURFACE_2 = Color.rgb(40, 40, 40);
+    public static final int BUTTON_BG = Color.rgb(19, 38, 33);
+    public static final int ICON_BUTTON_BG = Color.rgb(13, 27, 24);
     public static final int ACCENT = Color.rgb(72, 240, 164);
     public static final int TEXT = Color.rgb(241, 250, 246);
     public static final int MUTED = Color.rgb(157, 178, 170);
