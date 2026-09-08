@@ -44,6 +44,9 @@ public final class HeartRateService extends Service implements AppVisibility.Lis
     private static final int NOTIFICATION_ID = 18013;
     private static final int OVERLAY_WIDTH_DP = 173;
     private static final int OVERLAY_HEIGHT_DP = 150;
+    private static final String OVERLAY_POSITION_PREFS = "overlay_position";
+    private static final String KEY_OVERLAY_X = "x";
+    private static final String KEY_OVERLAY_Y = "y";
 
     /** Process-local samples keep the live chart working even when persistence is intentionally deferred. */
     public record LiveSample(long timestampMs, int bpm) {}
@@ -69,7 +72,6 @@ public final class HeartRateService extends Service implements AppVisibility.Lis
     private View overlay;
     private WindowManager.LayoutParams overlayParams;
     private TripleDigitView overlayBpm;
-    private MiniTrendAxisView miniAxis;
     private MiniTrendView miniTrend;
 
     public static long activeSessionId() { return ActiveSessionHolder.id; }
@@ -435,20 +437,20 @@ public final class HeartRateService extends Service implements AppVisibility.Lis
         if (windowManager == null) return;
 
         FrameLayout shell = new FrameLayout(this);
-        int glowInset = Ui.dp(this, 2);
+        int glowInset = Ui.dp(this, 3);
         shell.setPadding(glowInset, glowInset, glowInset, glowInset);
         shell.setClipChildren(false);
         shell.setClipToPadding(false);
 
         LinearLayout root = Ui.column(this);
-        root.setPadding(Ui.dp(this, 7), Ui.dp(this, 10), Ui.dp(this, 7), Ui.dp(this, 10));
+        root.setPadding(Ui.dp(this, 6), Ui.dp(this, 9), Ui.dp(this, 6), Ui.dp(this, 9));
         android.graphics.drawable.GradientDrawable panel = Ui.rounded(Ui.SURFACE, 18, this);
         panel.setStroke(Math.max(1, Ui.dp(this, 0.5f)), android.graphics.Color.argb(38, 255, 255, 255));
         root.setBackground(panel);
-        root.setElevation(Ui.dp(this, 2));
+        root.setElevation(Ui.dp(this, 3));
         if (Build.VERSION.SDK_INT >= 28) {
-            root.setOutlineAmbientShadowColor(android.graphics.Color.argb(70, 255, 255, 255));
-            root.setOutlineSpotShadowColor(android.graphics.Color.argb(42, 255, 255, 255));
+            root.setOutlineAmbientShadowColor(android.graphics.Color.argb(78, 255, 255, 255));
+            root.setOutlineSpotShadowColor(android.graphics.Color.argb(48, 255, 255, 255));
         }
         shell.addView(root, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
 
@@ -464,11 +466,7 @@ public final class HeartRateService extends Service implements AppVisibility.Lis
         root.addView(top, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
         LinearLayout lower = Ui.row(this);
-        miniAxis = new MiniTrendAxisView(this);
         miniTrend = new MiniTrendView(this);
-        LinearLayout.LayoutParams axisLp = new LinearLayout.LayoutParams(Ui.dp(this, MiniTrendAxisView.WIDTH_DP), Ui.dp(this, 86));
-        axisLp.rightMargin = Ui.dp(this, MiniTrendAxisView.GAP_DP);
-        lower.addView(miniAxis, axisLp);
         lower.addView(miniTrend, new LinearLayout.LayoutParams(0, Ui.dp(this, 86), 1));
         root.addView(lower, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, Ui.dp(this, 86)));
 
@@ -478,8 +476,7 @@ public final class HeartRateService extends Service implements AppVisibility.Lis
                 WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
                 PixelFormat.TRANSLUCENT);
         overlayParams.gravity = Gravity.TOP | Gravity.START;
-        overlayParams.x = Ui.dp(this, 18);
-        overlayParams.y = Ui.dp(this, 120);
+        restoreOverlayPosition();
         attachOverlayTouch(shell);
         overlay = shell;
         updateOverlayValues(latestBpm, maxBpm, sampleCount == 0 ? 0 : (int) Math.round(sampleSum / (double) sampleCount));
@@ -492,7 +489,6 @@ public final class HeartRateService extends Service implements AppVisibility.Lis
         }
         overlay = null;
         overlayBpm = null;
-        miniAxis = null;
         miniTrend = null;
     }
 
@@ -500,11 +496,37 @@ public final class HeartRateService extends Service implements AppVisibility.Lis
         if (overlayBpm == null) return;
         if (bpm > 0) overlayBpm.setValue(bpm); else overlayBpm.setUnavailable();
         HeartRateAxis.OverlayBands bands = HeartRateAxis.forOverlay(max, avg);
-        if (miniAxis != null) miniAxis.setBands(bands.maxBand(), bands.avgBand());
         if (miniTrend != null) {
             miniTrend.setBands(bands.maxBand(), bands.avgBand());
             if (bpm > 0) miniTrend.addValue(bpm);
         }
+    }
+
+    private int maxOverlayX() {
+        return Math.max(0, getResources().getDisplayMetrics().widthPixels - Ui.dp(this, OVERLAY_WIDTH_DP));
+    }
+
+    private int maxOverlayY() {
+        return Math.max(0, getResources().getDisplayMetrics().heightPixels - Ui.dp(this, OVERLAY_HEIGHT_DP));
+    }
+
+    private void restoreOverlayPosition() {
+        SharedPreferences prefs = getSharedPreferences(OVERLAY_POSITION_PREFS, MODE_PRIVATE);
+        int defaultX = Ui.dp(this, 18);
+        int defaultY = Ui.dp(this, 120);
+        int savedX = prefs.getInt(KEY_OVERLAY_X, defaultX);
+        int savedY = prefs.getInt(KEY_OVERLAY_Y, defaultY);
+        overlayParams.x = Math.max(0, Math.min(maxOverlayX(), savedX));
+        overlayParams.y = Math.max(0, Math.min(maxOverlayY(), savedY));
+        if (overlayParams.x != savedX || overlayParams.y != savedY) saveOverlayPosition();
+    }
+
+    private void saveOverlayPosition() {
+        if (overlayParams == null) return;
+        getSharedPreferences(OVERLAY_POSITION_PREFS, MODE_PRIVATE).edit()
+                .putInt(KEY_OVERLAY_X, overlayParams.x)
+                .putInt(KEY_OVERLAY_Y, overlayParams.y)
+                .apply();
     }
 
     private void attachOverlayTouch(View root) {
@@ -530,20 +552,24 @@ public final class HeartRateService extends Service implements AppVisibility.Lis
                         float dy = event.getRawY() - downRawY;
                         if (Math.hypot(dx, dy) > Ui.dp(HeartRateService.this, 6)) moved = true;
                         if (moved && windowManager != null && overlay != null) {
-                            int maxX = Math.max(0, getResources().getDisplayMetrics().widthPixels - Ui.dp(HeartRateService.this, OVERLAY_WIDTH_DP));
-                            int maxY = Math.max(0, getResources().getDisplayMetrics().heightPixels - Ui.dp(HeartRateService.this, OVERLAY_HEIGHT_DP));
-                            overlayParams.x = Math.max(0, Math.min(maxX, startX + Math.round(dx)));
-                            overlayParams.y = Math.max(0, Math.min(maxY, startY + Math.round(dy)));
+                            overlayParams.x = Math.max(0, Math.min(maxOverlayX(), startX + Math.round(dx)));
+                            overlayParams.y = Math.max(0, Math.min(maxOverlayY(), startY + Math.round(dy)));
                             try { windowManager.updateViewLayout(overlay, overlayParams); } catch (Exception ignored) {}
                         }
                         return true;
                     }
                     case android.view.MotionEvent.ACTION_UP -> {
-                        if (!moved && System.currentTimeMillis() - downAt < 600) {
+                        if (moved) {
+                            saveOverlayPosition();
+                        } else if (System.currentTimeMillis() - downAt < 600) {
                             Intent i = new Intent(HeartRateService.this, com.careychi.hrstrap.ui.ContinuousRecordingActivity.class)
                                     .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_CLEAR_TOP);
                             startActivity(i);
                         }
+                        return true;
+                    }
+                    case android.view.MotionEvent.ACTION_CANCEL -> {
+                        if (moved) saveOverlayPosition();
                         return true;
                     }
                 }
