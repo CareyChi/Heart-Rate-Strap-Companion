@@ -1,32 +1,22 @@
 package com.careychi.hrstrap.ui;
 
 import android.content.*;
-import android.net.Uri;
-import android.os.*;
-import android.provider.Settings;
 import android.view.*;
 import android.widget.*;
 import androidx.appcompat.app.AppCompatActivity;
-import com.google.android.material.button.MaterialButton;
+import com.careychi.hrstrap.data.RecordingRecovery;
 
 public final class SettingsActivity extends AppCompatActivity {
-    private TextView overlayStatus;
-    private TextView batteryStatus;
-
     @Override protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         buildUi();
-    }
-
-    @Override protected void onResume() {
-        super.onResume();
-        refreshStates();
     }
 
     private void buildUi() {
         LinearLayout root = Ui.column(this);
         root.setBackgroundColor(Ui.BG);
         root.setPadding(Ui.dp(this, 20), Ui.dp(this, 18), Ui.dp(this, 20), Ui.dp(this, 24));
+
         LinearLayout top = Ui.row(this);
         TextView back = Ui.text(this, "‹", 36, Ui.TEXT);
         back.setGravity(Gravity.CENTER);
@@ -35,85 +25,44 @@ public final class SettingsActivity extends AppCompatActivity {
         top.addView(Ui.title(this, "应用设置"));
         root.addView(top);
 
-        root.addView(section("悬浮窗权限", "记录期间最小化应用后显示可拖动的实时心率悬浮窗。", true));
-        root.addView(section("后台无限制", "建议关闭电池优化，降低长时间记录被系统中止的概率。", false));
+        LinearLayout background = Ui.row(this);
+        background.setGravity(Gravity.CENTER_VERTICAL);
+        background.setBackground(Ui.rounded(Ui.SURFACE, 20, this));
+        Ui.pad(background, 16);
+        LinearLayout bgText = Ui.column(this);
+        bgText.addView(Ui.text(this, "后台运行", 18, Ui.TEXT));
+        TextView bgDesc = Ui.text(this, "悬浮窗、电池优化、应用加锁与自启动", 13, Ui.MUTED);
+        bgDesc.setPadding(0, Ui.dp(this, 5), 0, 0);
+        bgText.addView(bgDesc);
+        background.addView(bgText, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
+        TextView arrow = Ui.text(this, "›", 30, Ui.MUTED);
+        arrow.setGravity(Gravity.CENTER);
+        background.addView(arrow, new LinearLayout.LayoutParams(Ui.dp(this, 36), Ui.dp(this, 48)));
+        background.setOnClickListener(v -> startActivity(new Intent(this, BackgroundSettingsActivity.class)));
+        LinearLayout.LayoutParams bgLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        bgLp.topMargin = Ui.dp(this, 14);
+        root.addView(background, bgLp);
 
-        LinearLayout lock = Ui.column(this);
-        lock.setBackground(Ui.rounded(Ui.SURFACE, 20, this));
-        Ui.pad(lock, 16);
-        lock.addView(Ui.text(this, "应用加锁 / 自启动", 18, Ui.TEXT));
-        TextView note = Ui.text(this, "Android 没有统一的“最近任务加锁”接口。请在最近任务或手机管家中手动加锁，并在厂商后台管理中允许自启动/后台运行。", 14, Ui.MUTED);
-        note.setPadding(0, Ui.dp(this, 8), 0, Ui.dp(this, 12));
-        lock.addView(note);
-        MaterialButton open = button("打开应用系统详情");
-        open.setOnClickListener(v -> openAppDetails());
-        lock.addView(open);
-        LinearLayout.LayoutParams lockLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        lockLp.topMargin = Ui.dp(this, 14);
-        root.addView(lock, lockLp);
+        LinearLayout recovery = Ui.column(this);
+        recovery.setBackground(Ui.rounded(Ui.SURFACE, 20, this));
+        Ui.pad(recovery, 16);
+        LinearLayout switchRow = Ui.row(this);
+        TextView title = Ui.text(this, "防止意外中断", 18, Ui.TEXT);
+        switchRow.addView(title, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
+        Switch toggle = new Switch(this);
+        toggle.setChecked(RecordingRecovery.isEnabled(this));
+        toggle.setOnCheckedChangeListener((buttonView, isChecked) -> RecordingRecovery.setEnabled(this, isChecked));
+        switchRow.addView(toggle);
+        recovery.addView(switchRow);
+        TextView note = Ui.text(this, "在意外退出时保存已记录数据", 12, Ui.MUTED);
+        note.setTypeface(android.graphics.Typeface.create("sans-serif", android.graphics.Typeface.NORMAL));
+        note.setAlpha(0.82f);
+        note.setPadding(0, Ui.dp(this, 6), 0, 0);
+        recovery.addView(note);
+        LinearLayout.LayoutParams recoveryLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        recoveryLp.topMargin = Ui.dp(this, 14);
+        root.addView(recovery, recoveryLp);
+
         setContentView(root);
-    }
-
-    private View section(String title, String description, boolean overlay) {
-        LinearLayout card = Ui.column(this);
-        card.setBackground(Ui.rounded(Ui.SURFACE, 20, this));
-        Ui.pad(card, 16);
-        card.addView(Ui.text(this, title, 18, Ui.TEXT));
-        TextView desc = Ui.text(this, description, 14, Ui.MUTED);
-        desc.setPadding(0, Ui.dp(this, 8), 0, Ui.dp(this, 8));
-        card.addView(desc);
-        TextView state = Ui.text(this, "检测中", 13, Ui.MUTED);
-        card.addView(state);
-        MaterialButton b = button("打开系统设置");
-        b.setOnClickListener(v -> {
-            if (overlay) openOverlay(); else openBatteryOptimization();
-        });
-        LinearLayout.LayoutParams blp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, Ui.dp(this, 52));
-        blp.topMargin = Ui.dp(this, 10);
-        card.addView(b, blp);
-        if (overlay) overlayStatus = state; else batteryStatus = state;
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        lp.topMargin = Ui.dp(this, 14);
-        card.setLayoutParams(lp);
-        return card;
-    }
-
-    private MaterialButton button(String text) {
-        MaterialButton b = new MaterialButton(this);
-        b.setText(text);
-        b.setTextColor(Ui.TEXT);
-        b.setBackgroundTintList(android.content.res.ColorStateList.valueOf(Ui.SURFACE_2));
-        b.setCornerRadius(Ui.dp(this, 14));
-        return b;
-    }
-
-    private void refreshStates() {
-        if (overlayStatus != null) {
-            boolean granted = Settings.canDrawOverlays(this);
-            overlayStatus.setText(granted ? "当前：已允许" : "当前：未允许");
-            overlayStatus.setTextColor(granted ? Ui.ACCENT : Ui.MUTED);
-        }
-        if (batteryStatus != null) {
-            android.os.PowerManager pm = getSystemService(android.os.PowerManager.class);
-            boolean ignored = pm != null && pm.isIgnoringBatteryOptimizations(getPackageName());
-            batteryStatus.setText(ignored ? "当前：不受电池优化限制" : "当前：受电池优化限制");
-            batteryStatus.setTextColor(ignored ? Ui.ACCENT : Ui.MUTED);
-        }
-    }
-
-    private void openOverlay() {
-        try {
-            startActivity(new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:" + getPackageName())));
-        } catch (Exception e) { openAppDetails(); }
-    }
-
-    private void openBatteryOptimization() {
-        try {
-            startActivity(new Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS));
-        } catch (Exception e) { openAppDetails(); }
-    }
-
-    private void openAppDetails() {
-        startActivity(new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:" + getPackageName())));
     }
 }
