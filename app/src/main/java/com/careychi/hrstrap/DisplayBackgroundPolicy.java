@@ -11,7 +11,10 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
+import java.util.HashSet;
 import java.util.Locale;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -39,7 +42,7 @@ public final class DisplayBackgroundPolicy {
             "/sys/class/drm/card0-eDP-1/panel_name"
     };
 
-    private static final String[] PANEL_PROPERTY_KEYS = {
+    private static final Set<String> PANEL_PROPERTY_KEYS = new HashSet<>(Arrays.asList(
             "ro.boot.display_panel",
             "ro.boot.display.panel",
             "ro.boot.panel",
@@ -56,7 +59,7 @@ public final class DisplayBackgroundPolicy {
             "persist.vendor.display.panel_type",
             "ro.lcd.panel",
             "ro.hardware.panel"
-    };
+    ));
 
     private static boolean installed;
 
@@ -100,10 +103,8 @@ public final class DisplayBackgroundPolicy {
             if (!text.isEmpty()) evidence.append('\n').append(text);
         }
 
-        for (String key : PANEL_PROPERTY_KEYS) {
-            String value = readSystemProperty(key);
-            if (!value.isEmpty()) evidence.append('\n').append(value);
-        }
+        String properties = readPanelProperties();
+        if (!properties.isEmpty()) evidence.append('\n').append(properties);
         return classifyPanelDescriptor(evidence.toString());
     }
 
@@ -130,27 +131,39 @@ public final class DisplayBackgroundPolicy {
         }
     }
 
-    private static String readSystemProperty(String key) {
+    private static String readPanelProperties() {
         Process process = null;
+        StringBuilder result = new StringBuilder();
         try {
-            process = new ProcessBuilder("/system/bin/getprop", key)
+            process = new ProcessBuilder("/system/bin/getprop")
                     .redirectErrorStream(true)
                     .start();
-            boolean finished = process.waitFor(150, TimeUnit.MILLISECONDS);
-            if (!finished) {
-                process.destroy();
-                return "";
-            }
+
+            // Consume output while getprop is running so a large property list cannot fill the
+            // process pipe and stall application startup.
             try (BufferedReader reader = new BufferedReader(new InputStreamReader(
                     process.getInputStream(), StandardCharsets.UTF_8))) {
-                String value = reader.readLine();
-                return value == null ? "" : value.trim();
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    int keyStart = line.indexOf('[');
+                    int keyEnd = line.indexOf(']');
+                    int valueStart = line.indexOf('[', keyEnd + 1);
+                    int valueEnd = line.lastIndexOf(']');
+                    if (keyStart < 0 || keyEnd <= keyStart || valueStart < 0 || valueEnd <= valueStart) continue;
+
+                    String key = line.substring(keyStart + 1, keyEnd).trim().toLowerCase(Locale.ROOT);
+                    if (!PANEL_PROPERTY_KEYS.contains(key)) continue;
+                    String value = line.substring(valueStart + 1, valueEnd).trim();
+                    if (!value.isEmpty()) result.append('\n').append(value);
+                }
             }
+            process.waitFor(100, TimeUnit.MILLISECONDS);
         } catch (Exception ignored) {
             return "";
         } finally {
             if (process != null) process.destroy();
         }
+        return result.toString();
     }
 
     private static boolean containsAny(String value, String... needles) {
