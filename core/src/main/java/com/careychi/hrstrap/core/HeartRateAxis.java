@@ -5,10 +5,23 @@ public final class HeartRateAxis {
     private HeartRateAxis() {}
 
     public record Bands(int maxBand, int midBand, int avgBand, int zero) {}
+    public record OverlayBands(int maxBand, int avgBand) {}
 
     public static int ceil25(int value) {
         if (value <= 0) return 0;
         return ((value + 24) / 25) * 25;
+    }
+
+    public static int floor25(int value) {
+        if (value <= 0) return 0;
+        return (value / 25) * 25;
+    }
+
+    public static OverlayBands forOverlay(int maxBpm, int avgBpm) {
+        int avgBand = floor25(avgBpm);
+        int maxBand = Math.max(25, ceil25(maxBpm));
+        maxBand = Math.max(maxBand, avgBand + 25);
+        return new OverlayBands(maxBand, avgBand);
     }
 
     public static Bands forChart(int maxBpm, int avgBpm) {
