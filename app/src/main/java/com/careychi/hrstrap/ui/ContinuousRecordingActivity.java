@@ -47,7 +47,7 @@ public final class ContinuousRecordingActivity extends AppCompatActivity impleme
     private void buildUi() {
         LinearLayout root = Ui.column(this);
         root.setBackgroundColor(Ui.BG);
-        root.setPadding(Ui.dp(this, 20), Ui.dp(this, 26), Ui.dp(this, 20), Ui.dp(this, 18));
+        root.setPadding(Ui.dp(this, 20), Ui.dp(this, 36), Ui.dp(this, 20), Ui.dp(this, 30));
 
         LinearLayout top = Ui.row(this);
         TextView back = Ui.text(this, "‹", 36, Ui.TEXT);
@@ -73,7 +73,9 @@ public final class ContinuousRecordingActivity extends AppCompatActivity impleme
         bpmLp.leftMargin = Ui.dp(this, 6);
         bpm.setTranslationY(Ui.dp(this, 9));
         hero.addView(bpm, bpmLp);
-        root.addView(hero, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, Ui.dp(this, 180)));
+        LinearLayout.LayoutParams heroLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, Ui.dp(this, 160));
+        heroLp.topMargin = Ui.dp(this, 20);
+        root.addView(hero, heroLp);
 
         LinearLayout metrics = Ui.row(this);
         metrics.setGravity(Gravity.CENTER);

@@ -38,7 +38,7 @@ public final class HistoryActivity extends AppCompatActivity {
     private void buildUi() {
         LinearLayout page = Ui.column(this);
         page.setBackgroundColor(Ui.BG);
-        page.setPadding(Ui.dp(this, 20), Ui.dp(this, 26), Ui.dp(this, 20), 0);
+        page.setPadding(Ui.dp(this, 20), Ui.dp(this, 36), Ui.dp(this, 20), 0);
         root = page;
         LinearLayout top = Ui.row(this);
         TextView back = Ui.text(this, "‹", 36, Ui.TEXT);
@@ -154,6 +154,9 @@ public final class HistoryActivity extends AppCompatActivity {
         LinearLayout panel = Ui.column(this);
         panel.setBackground(Ui.rounded(Ui.SURFACE_2, 28, this));
         panel.setPadding(Ui.dp(this, 20), Ui.dp(this, 20), Ui.dp(this, 20), Ui.dp(this, 18));
+        panel.setScaleX(0.92f);
+        panel.setScaleY(0.92f);
+        panel.setAlpha(0f);
 
         TextView type = Ui.title(this, "CONTINUOUS".equals(s.type) ? "持续记录" : "骑行记录");
         panel.addView(type);
@@ -178,19 +181,28 @@ public final class HistoryActivity extends AppCompatActivity {
         close.setOnClickListener(v -> dialog.dismiss());
         panel.addView(close, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, Ui.dp(this, 52)));
 
+        int dialogWidth = (int) (getResources().getDisplayMetrics().widthPixels * 0.92f);
+        int dialogHeight = (int) (getResources().getDisplayMetrics().heightPixels * 0.78f);
         dialog.setContentView(panel);
         Window window = dialog.getWindow();
         if (window != null) {
             window.setBackgroundDrawable(new ColorDrawable(android.graphics.Color.TRANSPARENT));
             window.setDimAmount(0.2f);
             window.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
+            window.setGravity(Gravity.CENTER);
+            WindowManager.LayoutParams attrs = window.getAttributes();
+            attrs.width = dialogWidth;
+            attrs.height = dialogHeight;
+            attrs.gravity = Gravity.CENTER;
+            window.setAttributes(attrs);
         }
         dialog.setOnShowListener(d -> {
             Window w = dialog.getWindow();
-            if (w != null) w.setLayout((int) (getResources().getDisplayMetrics().widthPixels * 0.92f),
-                    (int) (getResources().getDisplayMetrics().heightPixels * 0.78f));
-            panel.setScaleX(0.92f); panel.setScaleY(0.92f); panel.setAlpha(0f);
-            panel.animate().scaleX(1f).scaleY(1f).alpha(1f).setDuration(220).start();
+            if (w != null) {
+                w.setGravity(Gravity.CENTER);
+                w.setLayout(dialogWidth, dialogHeight);
+            }
+            panel.post(() -> panel.animate().scaleX(1f).scaleY(1f).alpha(1f).setDuration(220).start());
         });
         dialog.setOnDismissListener(d -> {
             if (Build.VERSION.SDK_INT >= 31) root.setRenderEffect(null);
