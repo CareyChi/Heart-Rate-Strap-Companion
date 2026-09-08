@@ -6,6 +6,7 @@ import android.view.*;
 import android.widget.*;
 import androidx.appcompat.app.AppCompatActivity;
 import com.careychi.hrstrap.OledBurnInProtection;
+import com.careychi.hrstrap.PureBlackBackground;
 import com.careychi.hrstrap.data.RecordingRecovery;
 
 public final class SettingsActivity extends AppCompatActivity {
@@ -65,6 +66,29 @@ public final class SettingsActivity extends AppCompatActivity {
         recoveryLp.topMargin = Ui.dp(this, 14);
         root.addView(recovery, recoveryLp);
 
+        LinearLayout pureBlack = Ui.column(this);
+        pureBlack.setBackground(Ui.rounded(Ui.SURFACE, 20, this));
+        Ui.pad(pureBlack, 16);
+        LinearLayout pureBlackRow = Ui.row(this);
+        TextView pureBlackTitle = Ui.text(this, "使用纯黑背景", 18, Ui.TEXT);
+        pureBlackRow.addView(pureBlackTitle, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
+        Switch pureBlackToggle = new Switch(this);
+        pureBlackToggle.setChecked(PureBlackBackground.isEnabled(this));
+        pureBlackToggle.setOnCheckedChangeListener((buttonView, isChecked) -> {
+            PureBlackBackground.setEnabled(this, isChecked);
+            recreate();
+        });
+        pureBlackRow.addView(pureBlackToggle);
+        pureBlack.addView(pureBlackRow);
+        TextView pureBlackNote = Ui.text(this, "OLED用户请无视，仅推荐LCD屏开启，以获得更加沉浸的体验", 12, Ui.MUTED);
+        pureBlackNote.setTypeface(android.graphics.Typeface.create("sans-serif", android.graphics.Typeface.NORMAL));
+        pureBlackNote.setAlpha(0.82f);
+        pureBlackNote.setPadding(0, Ui.dp(this, 6), 0, 0);
+        pureBlack.addView(pureBlackNote);
+        LinearLayout.LayoutParams pureBlackLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        pureBlackLp.topMargin = Ui.dp(this, 14);
+        root.addView(pureBlack, pureBlackLp);
+
         LinearLayout oled = Ui.column(this);
         oled.setBackground(Ui.rounded(Ui.SURFACE, 20, this));
         Ui.pad(oled, 16);
@@ -76,7 +100,7 @@ public final class SettingsActivity extends AppCompatActivity {
         oledToggle.setOnCheckedChangeListener((buttonView, isChecked) -> OledBurnInProtection.setEnabled(this, isChecked));
         oledRow.addView(oledToggle);
         oled.addView(oledRow);
-        TextView oledNote = Ui.text(this, "开启后每60秒在约2dp范围内轻微移动界面，分散固定像素长时间持续发光；关闭后立即归位。", 12, Ui.MUTED);
+        TextView oledNote = Ui.text(this, "定期位移界面，改善长期显示静止内容导致的烧屏现象", 12, Ui.MUTED);
         oledNote.setTypeface(android.graphics.Typeface.create("sans-serif", android.graphics.Typeface.NORMAL));
         oledNote.setAlpha(0.82f);
         oledNote.setPadding(0, Ui.dp(this, 6), 0, 0);
