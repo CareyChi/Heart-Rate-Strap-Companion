@@ -10,6 +10,7 @@ import android.graphics.PixelFormat;
 import android.os.*;
 import android.provider.Settings;
 import android.view.*;
+import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 import androidx.core.app.ActivityCompat;
@@ -432,24 +433,41 @@ public final class HeartRateService extends Service implements AppVisibility.Lis
         if (overlay != null) return;
         windowManager = getSystemService(WindowManager.class);
         if (windowManager == null) return;
+
+        FrameLayout shell = new FrameLayout(this);
+        int glowInset = Ui.dp(this, 2);
+        shell.setPadding(glowInset, glowInset, glowInset, glowInset);
+        shell.setClipChildren(false);
+        shell.setClipToPadding(false);
+
         LinearLayout root = Ui.column(this);
-        root.setPadding(Ui.dp(this, 9), Ui.dp(this, 12), Ui.dp(this, 9), Ui.dp(this, 12));
-        root.setBackground(Ui.rounded(Ui.SURFACE, 18, this));
-        root.setElevation(Ui.dp(this, 12));
+        root.setPadding(Ui.dp(this, 7), Ui.dp(this, 10), Ui.dp(this, 7), Ui.dp(this, 10));
+        android.graphics.drawable.GradientDrawable panel = Ui.rounded(Ui.SURFACE, 18, this);
+        panel.setStroke(Math.max(1, Ui.dp(this, 0.5f)), android.graphics.Color.argb(38, 255, 255, 255));
+        root.setBackground(panel);
+        root.setElevation(Ui.dp(this, 2));
+        if (Build.VERSION.SDK_INT >= 28) {
+            root.setOutlineAmbientShadowColor(android.graphics.Color.argb(70, 255, 255, 255));
+            root.setOutlineSpotShadowColor(android.graphics.Color.argb(42, 255, 255, 255));
+        }
+        shell.addView(root, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
 
         LinearLayout top = Ui.row(this);
         top.setGravity(Gravity.CENTER);
         overlayBpm = new TripleDigitView(this, 42);
         TextView bpm = Ui.text(this, "bpm", 16, Ui.TEXT);
+        LinearLayout.LayoutParams bpmLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        bpmLp.leftMargin = Ui.dp(this, 5);
+        bpm.setTranslationY(Ui.dp(this, 6));
         top.addView(overlayBpm);
-        top.addView(bpm);
+        top.addView(bpm, bpmLp);
         root.addView(top, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
         LinearLayout lower = Ui.row(this);
         miniAxis = new MiniTrendAxisView(this);
         miniTrend = new MiniTrendView(this);
-        LinearLayout.LayoutParams axisLp = new LinearLayout.LayoutParams(Ui.dp(this, 27), Ui.dp(this, 86));
-        axisLp.rightMargin = Ui.dp(this, 3);
+        LinearLayout.LayoutParams axisLp = new LinearLayout.LayoutParams(Ui.dp(this, MiniTrendAxisView.WIDTH_DP), Ui.dp(this, 86));
+        axisLp.rightMargin = Ui.dp(this, MiniTrendAxisView.GAP_DP);
         lower.addView(miniAxis, axisLp);
         lower.addView(miniTrend, new LinearLayout.LayoutParams(0, Ui.dp(this, 86), 1));
         root.addView(lower, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, Ui.dp(this, 86)));
@@ -462,10 +480,10 @@ public final class HeartRateService extends Service implements AppVisibility.Lis
         overlayParams.gravity = Gravity.TOP | Gravity.START;
         overlayParams.x = Ui.dp(this, 18);
         overlayParams.y = Ui.dp(this, 120);
-        attachOverlayTouch(root);
-        overlay = root;
+        attachOverlayTouch(shell);
+        overlay = shell;
         updateOverlayValues(latestBpm, maxBpm, sampleCount == 0 ? 0 : (int) Math.round(sampleSum / (double) sampleCount));
-        try { windowManager.addView(root, overlayParams); } catch (Exception e) { overlay = null; }
+        try { windowManager.addView(shell, overlayParams); } catch (Exception e) { overlay = null; }
     }
 
     private void hideOverlay() {
