@@ -17,6 +17,7 @@ import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.content.ContextCompat;
 import com.careychi.hrstrap.HeartRateState;
+import com.careychi.hrstrap.R;
 import com.careychi.hrstrap.data.RecordingRecovery;
 import com.careychi.hrstrap.service.HeartRateService;
 import com.google.android.material.button.MaterialButton;
@@ -65,15 +66,22 @@ public final class MainActivity extends AppCompatActivity implements HeartRateSt
         LinearLayout root = Ui.column(this);
         root.setBackgroundColor(Ui.BG);
         root.setPadding(Ui.dp(this, 22), Ui.dp(this, 36), Ui.dp(this, 22), Ui.dp(this, 24));
+        root.setClipChildren(false);
 
         LinearLayout top = Ui.row(this);
+        top.setClipChildren(false);
+        top.setClipToPadding(false);
         TextView title = Ui.title(this, "心率带伴侣");
         top.addView(title, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
-        TextView settings = iconButton("⚙", 24);
+
+        ImageView settings = iconButton(R.drawable.ic_settings_outline, 10);
         settings.setContentDescription("设置");
         settings.setOnClickListener(v -> startActivity(new Intent(this, SettingsActivity.class)));
-        top.addView(settings, new LinearLayout.LayoutParams(Ui.dp(this, 48), Ui.dp(this, 48)));
-        TextView history = iconButton("◷", 30);
+        LinearLayout.LayoutParams settingsLp = new LinearLayout.LayoutParams(Ui.dp(this, 48), Ui.dp(this, 48));
+        settingsLp.rightMargin = Ui.dp(this, 12);
+        top.addView(settings, settingsLp);
+
+        ImageView history = iconButton(R.drawable.ic_history_outline, 9);
         history.setContentDescription("历史记录");
         history.setOnClickListener(v -> startActivity(new Intent(this, HistoryActivity.class)));
         top.addView(history, new LinearLayout.LayoutParams(Ui.dp(this, 48), Ui.dp(this, 48)));
@@ -123,10 +131,22 @@ public final class MainActivity extends AppCompatActivity implements HeartRateSt
         setContentView(root);
     }
 
-    private TextView iconButton(String symbol, float textSp) {
-        TextView v = Ui.text(this, symbol, textSp, Ui.TEXT);
-        v.setGravity(Gravity.CENTER);
-        v.setBackground(Ui.rounded(Ui.ICON_BUTTON_BG, 14, this));
+    private ImageView iconButton(int drawableRes, int paddingDp) {
+        ImageView v = new ImageView(this);
+        v.setImageResource(drawableRes);
+        v.setImageTintList(android.content.res.ColorStateList.valueOf(Ui.TEXT));
+        v.setScaleType(ImageView.ScaleType.FIT_CENTER);
+        int padding = Ui.dp(this, paddingDp);
+        v.setPadding(padding, padding, padding, padding);
+
+        android.graphics.drawable.GradientDrawable bg = Ui.rounded(Ui.BG, 14, this);
+        bg.setStroke(Math.max(1, Ui.dp(this, 0.6f)), Color.argb(58, 255, 255, 255));
+        v.setBackground(bg);
+        v.setElevation(Ui.dp(this, 3));
+        if (Build.VERSION.SDK_INT >= 28) {
+            v.setOutlineAmbientShadowColor(Color.argb(82, 255, 255, 255));
+            v.setOutlineSpotShadowColor(Color.argb(48, 255, 255, 255));
+        }
         return v;
     }
 
