@@ -28,10 +28,10 @@ jobs:
         run: |
           gradle :app:assembleArm32Release :app:assembleArm64Release --stacktrace
           mkdir -p release
-          cp app/build/outputs/apk/arm32/release/app-arm32-release.apk release/Heart-Rate-Strap-Companion-v0.0.1-arm32.apk
-          cp app/build/outputs/apk/arm64/release/app-arm64-release.apk release/Heart-Rate-Strap-Companion-v0.0.1-arm64.apk
+          cp app/build/outputs/apk/arm32/release/app-arm32-release.apk release/Heart-Rate-Strap-Companion-v0.0.2-arm32.apk
+          cp app/build/outputs/apk/arm64/release/app-arm64-release.apk release/Heart-Rate-Strap-Companion-v0.0.2-arm64.apk
       - uses: actions/upload-artifact@v4
         with:
-          name: Heart-Rate-Strap-Companion-v0.0.1
+          name: Heart-Rate-Strap-Companion-v0.0.2
           path: release/*.apk
           if-no-files-found: error
