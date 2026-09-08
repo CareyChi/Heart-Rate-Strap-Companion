@@ -6,18 +6,14 @@ import android.view.View;
 import java.util.ArrayDeque;
 import java.util.Deque;
 
-/** Compact 60-second trend used by the system overlay, including its in-chart Y labels. */
+/** Compact 60-second trend used by the system overlay. */
 public final class MiniTrendView extends View {
     public static final float PLOT_INSET_DP = 6f;
-    private static final float PLOT_LEFT_DP = 20f;
-    private static final float PLOT_RIGHT_DP = 2f;
-    private static final float LABEL_RIGHT_DP = 17f;
 
     private final Deque<Integer> values = new ArrayDeque<>();
     private final Paint line = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint guide = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint fill = new Paint(Paint.ANTI_ALIAS_FLAG);
-    private final Paint axisText = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Path path = new Path();
     private final Path fillPath = new Path();
     private int maxBand = 25;
@@ -31,10 +27,6 @@ public final class MiniTrendView extends View {
         guide.setColor(Color.argb(100, 157, 178, 170));
         guide.setStrokeWidth(Ui.dp(context, 1));
         guide.setPathEffect(new DashPathEffect(new float[]{Ui.dp(context, 5), Ui.dp(context, 5)}, 0));
-        axisText.setColor(Ui.MUTED);
-        axisText.setTextSize(Ui.dp(context, 9));
-        axisText.setTextAlign(Paint.Align.RIGHT);
-        axisText.setTypeface(Typeface.create("sans-serif", Typeface.NORMAL));
     }
 
     public void setBands(int maxBand, int avgBand) {
@@ -60,22 +52,18 @@ public final class MiniTrendView extends View {
 
     @Override protected void onDraw(Canvas canvas) {
         super.onDraw(canvas);
-        float plotLeft = Ui.dp(getContext(), PLOT_LEFT_DP);
-        float plotRight = getWidth() - Ui.dp(getContext(), PLOT_RIGHT_DP);
         float bottom = getHeight() - Ui.dp(getContext(), PLOT_INSET_DP);
         float avgY = yForBand(getContext(), getHeight(), avgBand, maxBand);
-        canvas.drawLine(plotLeft, avgY, plotRight, avgY, guide);
-        drawBandLabel(canvas, maxBand);
-        if (avgBand != maxBand) drawBandLabel(canvas, avgBand);
-        if (values.isEmpty() || plotRight <= plotLeft) return;
+        canvas.drawLine(0, avgY, getWidth(), avgY, guide);
+        if (values.isEmpty()) return;
 
         path.reset();
         fillPath.reset();
         int i = 0;
         int n = Math.max(2, values.size());
-        float lastX = plotLeft;
+        float lastX = 0;
         for (int v : values) {
-            float x = plotLeft + (plotRight - plotLeft) * i / (float) (n - 1);
+            float x = getWidth() * i / (float) (n - 1);
             float y = yForBand(getContext(), getHeight(), v, maxBand);
             if (i == 0) {
                 path.moveTo(x, y);
@@ -96,15 +84,5 @@ public final class MiniTrendView extends View {
                 Color.argb(90, 72, 240, 164), Color.TRANSPARENT, Shader.TileMode.CLAMP));
         canvas.drawPath(fillPath, fill);
         fill.setShader(null);
-    }
-
-    private void drawBandLabel(Canvas canvas, int value) {
-        float y = yForBand(getContext(), getHeight(), value, maxBand);
-        Paint.FontMetrics fm = axisText.getFontMetrics();
-        float baseline = y - (fm.ascent + fm.descent) / 2f;
-        float minBaseline = -fm.ascent;
-        float maxBaseline = getHeight() - fm.descent;
-        baseline = Math.max(minBaseline, Math.min(maxBaseline, baseline));
-        canvas.drawText(Integer.toString(value), Ui.dp(getContext(), LABEL_RIGHT_DP), baseline, axisText);
     }
 }

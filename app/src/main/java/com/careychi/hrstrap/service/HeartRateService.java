@@ -72,6 +72,7 @@ public final class HeartRateService extends Service implements AppVisibility.Lis
     private View overlay;
     private WindowManager.LayoutParams overlayParams;
     private TripleDigitView overlayBpm;
+    private MiniTrendAxisView miniAxis;
     private MiniTrendView miniTrend;
 
     public static long activeSessionId() { return ActiveSessionHolder.id; }
@@ -466,7 +467,11 @@ public final class HeartRateService extends Service implements AppVisibility.Lis
         root.addView(top, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
         LinearLayout lower = Ui.row(this);
+        miniAxis = new MiniTrendAxisView(this);
         miniTrend = new MiniTrendView(this);
+        LinearLayout.LayoutParams axisLp = new LinearLayout.LayoutParams(Ui.dp(this, MiniTrendAxisView.WIDTH_DP), Ui.dp(this, 86));
+        axisLp.rightMargin = Ui.dp(this, MiniTrendAxisView.GAP_DP);
+        lower.addView(miniAxis, axisLp);
         lower.addView(miniTrend, new LinearLayout.LayoutParams(0, Ui.dp(this, 86), 1));
         root.addView(lower, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, Ui.dp(this, 86)));
 
@@ -489,6 +494,7 @@ public final class HeartRateService extends Service implements AppVisibility.Lis
         }
         overlay = null;
         overlayBpm = null;
+        miniAxis = null;
         miniTrend = null;
     }
 
@@ -496,6 +502,7 @@ public final class HeartRateService extends Service implements AppVisibility.Lis
         if (overlayBpm == null) return;
         if (bpm > 0) overlayBpm.setValue(bpm); else overlayBpm.setUnavailable();
         HeartRateAxis.OverlayBands bands = HeartRateAxis.forOverlay(max, avg);
+        if (miniAxis != null) miniAxis.setBands(bands.maxBand(), bands.avgBand());
         if (miniTrend != null) {
             miniTrend.setBands(bands.maxBand(), bands.avgBand());
             if (bpm > 0) miniTrend.addValue(bpm);

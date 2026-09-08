@@ -9,6 +9,7 @@ import androidx.lifecycle.ProcessLifecycleOwner;
 public final class HeartRateApplication extends Application implements DefaultLifecycleObserver {
     @Override public void onCreate() {
         super.onCreate();
+        OledBurnInProtection.install(this);
         ProcessLifecycleOwner.get().getLifecycle().addObserver(this);
     }
 
