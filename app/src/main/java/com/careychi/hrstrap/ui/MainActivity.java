@@ -64,16 +64,16 @@ public final class MainActivity extends AppCompatActivity implements HeartRateSt
         getWindow().setStatusBarColor(Ui.BG);
         LinearLayout root = Ui.column(this);
         root.setBackgroundColor(Ui.BG);
-        root.setPadding(Ui.dp(this, 22), Ui.dp(this, 26), Ui.dp(this, 22), Ui.dp(this, 24));
+        root.setPadding(Ui.dp(this, 22), Ui.dp(this, 36), Ui.dp(this, 22), Ui.dp(this, 24));
 
         LinearLayout top = Ui.row(this);
         TextView title = Ui.title(this, "心率带伴侣");
         top.addView(title, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
-        TextView settings = iconButton("⚙");
+        TextView settings = iconButton("⚙", 24);
         settings.setContentDescription("设置");
         settings.setOnClickListener(v -> startActivity(new Intent(this, SettingsActivity.class)));
         top.addView(settings, new LinearLayout.LayoutParams(Ui.dp(this, 48), Ui.dp(this, 48)));
-        TextView history = iconButton("◷");
+        TextView history = iconButton("◷", 30);
         history.setContentDescription("历史记录");
         history.setOnClickListener(v -> startActivity(new Intent(this, HistoryActivity.class)));
         top.addView(history, new LinearLayout.LayoutParams(Ui.dp(this, 48), Ui.dp(this, 48)));
@@ -123,8 +123,8 @@ public final class MainActivity extends AppCompatActivity implements HeartRateSt
         setContentView(root);
     }
 
-    private TextView iconButton(String symbol) {
-        TextView v = Ui.text(this, symbol, 24, Ui.TEXT);
+    private TextView iconButton(String symbol, float textSp) {
+        TextView v = Ui.text(this, symbol, textSp, Ui.TEXT);
         v.setGravity(Gravity.CENTER);
         v.setBackground(Ui.rounded(Ui.ICON_BUTTON_BG, 14, this));
         return v;
