@@ -97,8 +97,8 @@ jobs:
             grep -F "application-label:'心率带伴侣 V0.0.2B'" <<< "$BADGING"
           done
 
-          CERT32="$("$APKSIGNER" verify --print-certs "$APK32" | sed -n 's/^Signer #1 certificate SHA-256 digest: //p' | head -n 1)"
-          CERT64="$("$APKSIGNER" verify --print-certs "$APK64" | sed -n 's/^Signer #1 certificate SHA-256 digest: //p' | head -n 1)"
+          CERT32="$("$APKSIGNER" verify --print-certs "$APK32" | sed -n 's/.*certificate SHA-256 digest: //p' | head -n 1)"
+          CERT64="$("$APKSIGNER" verify --print-certs "$APK64" | sed -n 's/.*certificate SHA-256 digest: //p' | head -n 1)"
           test -n "$CERT32"
           test "$CERT32" = "$CERT64"
           echo "V0.0.2B signer SHA-256: $CERT32"
