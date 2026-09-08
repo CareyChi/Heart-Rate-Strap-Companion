@@ -64,7 +64,7 @@ public final class MainActivity extends AppCompatActivity implements HeartRateSt
         getWindow().setStatusBarColor(Ui.BG);
         LinearLayout root = Ui.column(this);
         root.setBackgroundColor(Ui.BG);
-        root.setPadding(Ui.dp(this, 22), Ui.dp(this, 18), Ui.dp(this, 22), Ui.dp(this, 24));
+        root.setPadding(Ui.dp(this, 22), Ui.dp(this, 26), Ui.dp(this, 22), Ui.dp(this, 24));
 
         LinearLayout top = Ui.row(this);
         TextView title = Ui.title(this, "心率带伴侣");
@@ -97,7 +97,10 @@ public final class MainActivity extends AppCompatActivity implements HeartRateSt
         bpmDigits.setUnavailable();
         deviceCard.addView(bpmDigits);
         TextView bpm = Ui.text(this, "bpm", 12, Ui.MUTED);
-        deviceCard.addView(bpm);
+        LinearLayout.LayoutParams bpmLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        bpmLp.leftMargin = Ui.dp(this, 4);
+        bpm.setTranslationY(Ui.dp(this, 3));
+        deviceCard.addView(bpm, bpmLp);
         deviceCard.setOnClickListener(v -> scanForHeartRateDevices());
         root.addView(deviceCard, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, Ui.dp(this, 98)));
 

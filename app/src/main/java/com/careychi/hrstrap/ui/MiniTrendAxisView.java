@@ -8,6 +8,9 @@ import android.view.View;
 
 /** Two-label Y axis for the overlay trend. Labels share the exact plot geometry with MiniTrendView. */
 public final class MiniTrendAxisView extends View {
+    public static final int WIDTH_DP = 20;
+    public static final int GAP_DP = 2;
+
     private final Paint text = new Paint(Paint.ANTI_ALIAS_FLAG);
     private int maxBand = 25;
     private int avgBand;

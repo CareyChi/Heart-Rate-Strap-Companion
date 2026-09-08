@@ -38,7 +38,7 @@ public final class HistoryActivity extends AppCompatActivity {
     private void buildUi() {
         LinearLayout page = Ui.column(this);
         page.setBackgroundColor(Ui.BG);
-        page.setPadding(Ui.dp(this, 20), Ui.dp(this, 16), Ui.dp(this, 20), 0);
+        page.setPadding(Ui.dp(this, 20), Ui.dp(this, 26), Ui.dp(this, 20), 0);
         root = page;
         LinearLayout top = Ui.row(this);
         TextView back = Ui.text(this, "‹", 36, Ui.TEXT);
@@ -135,7 +135,11 @@ public final class HistoryActivity extends AppCompatActivity {
         TripleDigitView digits = new TripleDigitView(this, 15);
         if (bpm > 0) digits.setValue(bpm); else digits.setUnavailable();
         value.addView(digits);
-        value.addView(Ui.text(this, "bpm", 10, Ui.MUTED));
+        TextView suffix = Ui.text(this, "bpm", 10, Ui.MUTED);
+        LinearLayout.LayoutParams suffixLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        suffixLp.leftMargin = Ui.dp(this, 3);
+        suffix.setTranslationY(Ui.dp(this, 2));
+        value.addView(suffix, suffixLp);
         box.addView(value);
         return box;
     }
