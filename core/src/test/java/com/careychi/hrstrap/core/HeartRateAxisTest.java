@@ -23,4 +23,25 @@ class HeartRateAxisTest {
         assertEquals(125, bands.avgBand());
         assertEquals(0, bands.zero());
     }
+
+    @Test void overlayRecentScaleUsesFiftyBpmStepsAndDynamicMinimum() {
+        assertOverlayScale(0, 100, 50, 20);
+        assertOverlayScale(49, 100, 50, 20);
+        assertOverlayScale(79, 100, 50, 20);
+        assertOverlayScale(100, 100, 50, 20);
+        assertOverlayScale(101, 150, 100, 30);
+        assertOverlayScale(125, 150, 100, 30);
+        assertOverlayScale(150, 150, 100, 30);
+        assertOverlayScale(151, 200, 150, 40);
+        assertOverlayScale(168, 200, 150, 40);
+        assertOverlayScale(200, 200, 150, 40);
+        assertOverlayScale(201, 250, 200, 50);
+    }
+
+    private static void assertOverlayScale(int recentMax, int expectedMax, int expectedMid, int expectedMin) {
+        HeartRateAxis.OverlayScale scale = HeartRateAxis.forOverlayRecent(recentMax);
+        assertEquals(expectedMax, scale.maxBand());
+        assertEquals(expectedMid, scale.midBand());
+        assertEquals(expectedMin, scale.minBand());
+    }
 }

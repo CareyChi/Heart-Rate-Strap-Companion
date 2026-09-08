@@ -18,7 +18,7 @@
     <application
         android:name=".HeartRateApplication"
         android:allowBackup="true"
-        android:label="心率带伴侣"
+        android:label="心率带伴侣 V0.0.2B"
         android:supportsRtl="true"
         android:theme="@style/Theme.HeartRateCompanion">
 

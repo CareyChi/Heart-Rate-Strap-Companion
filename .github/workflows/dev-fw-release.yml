@@ -1,0 +1,142 @@
+name: V0.0.2B Dev FW Release
+
+on:
+  push:
+    branches: [ dev_FW-modify ]
+
+permissions:
+  contents: write
+
+jobs:
+  release-dev-fw:
+    if: contains(github.event.head_commit.message, '[release-v0.0.2B]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      - name: Verify branch and revision
+        run: |
+          test "${GITHUB_REF_NAME}" = "dev_FW-modify"
+          CURRENT_SHA="$(gh api "repos/${GITHUB_REPOSITORY}/commits/dev_FW-modify" --jq '.sha')"
+          test "$CURRENT_SHA" = "$GITHUB_SHA"
+
+      - name: Unit tests and Android lint
+        run: gradle :core:test :app:testArm32DebugUnitTest :app:testArm64DebugUnitTest :app:lintArm32Debug :app:lintArm64Debug --stacktrace
+
+      - name: Build unsigned release APKs
+        run: gradle :app:assembleArm32Release :app:assembleArm64Release --stacktrace
+
+      - name: Generate one-off V0.0.2B signing key
+        shell: bash
+        run: |
+          PASS="$(openssl rand -hex 24)"
+          echo "::add-mask::$PASS"
+          KEYSTORE="$RUNNER_TEMP/hrstrap-v0.0.2b-dev.p12"
+          ALIAS="hrstrap-v0.0.2b-dev"
+          keytool -genkeypair -noprompt \
+            -storetype PKCS12 \
+            -keystore "$KEYSTORE" \
+            -storepass "$PASS" \
+            -keypass "$PASS" \
+            -alias "$ALIAS" \
+            -keyalg RSA \
+            -keysize 3072 \
+            -validity 3650 \
+            -dname "CN=Heart Rate Strap Companion V0.0.2B Dev, OU=dev_FW-modify, O=CareyChi"
+          echo "DEV_B_PASS=$PASS" >> "$GITHUB_ENV"
+          echo "DEV_B_KEYSTORE=$KEYSTORE" >> "$GITHUB_ENV"
+          echo "DEV_B_ALIAS=$ALIAS" >> "$GITHUB_ENV"
+
+      - name: Sign and verify independent APKs
+        shell: bash
+        run: |
+          set -euo pipefail
+          BUILD_TOOLS="$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -n 1)"
+          ZIPALIGN="$BUILD_TOOLS/zipalign"
+          APKSIGNER="$BUILD_TOOLS/apksigner"
+          AAPT="$BUILD_TOOLS/aapt"
+          test -x "$ZIPALIGN"
+          test -x "$APKSIGNER"
+          test -x "$AAPT"
+
+          ARM32_SRC="$(find app/build/outputs/apk/arm32/release -maxdepth 1 -type f -name '*.apk' | head -n 1)"
+          ARM64_SRC="$(find app/build/outputs/apk/arm64/release -maxdepth 1 -type f -name '*.apk' | head -n 1)"
+          test -n "$ARM32_SRC"
+          test -n "$ARM64_SRC"
+
+          mkdir -p release
+          ZIP32="$RUNNER_TEMP/v0.0.2b-arm32-aligned.apk"
+          ZIP64="$RUNNER_TEMP/v0.0.2b-arm64-aligned.apk"
+          APK32="release/Heart-Rate-Strap-Companion-V0.0.2B-arm32.apk"
+          APK64="release/Heart-Rate-Strap-Companion-V0.0.2B-arm64.apk"
+
+          "$ZIPALIGN" -f -p 4 "$ARM32_SRC" "$ZIP32"
+          "$ZIPALIGN" -f -p 4 "$ARM64_SRC" "$ZIP64"
+          "$APKSIGNER" sign --ks "$DEV_B_KEYSTORE" --ks-key-alias "$DEV_B_ALIAS" \
+            --ks-pass env:DEV_B_PASS --key-pass env:DEV_B_PASS --out "$APK32" "$ZIP32"
+          "$APKSIGNER" sign --ks "$DEV_B_KEYSTORE" --ks-key-alias "$DEV_B_ALIAS" \
+            --ks-pass env:DEV_B_PASS --key-pass env:DEV_B_PASS --out "$APK64" "$ZIP64"
+
+          for apk in "$APK32" "$APK64"; do
+            "$APKSIGNER" verify --verbose --print-certs "$apk"
+            BADGING="$("$AAPT" dump badging "$apk")"
+            grep -F "package: name='com.careychi.hrstrap.devfwmodify'" <<< "$BADGING"
+            grep -F "versionName='0.0.2B'" <<< "$BADGING"
+            grep -F "application-label:'心率带伴侣 V0.0.2B'" <<< "$BADGING"
+          done
+
+          CERT32="$("$APKSIGNER" verify --print-certs "$APK32" | sed -n 's/^Signer #1 certificate SHA-256 digest: //p' | head -n 1)"
+          CERT64="$("$APKSIGNER" verify --print-certs "$APK64" | sed -n 's/^Signer #1 certificate SHA-256 digest: //p' | head -n 1)"
+          test -n "$CERT32"
+          test "$CERT32" = "$CERT64"
+          echo "V0.0.2B signer SHA-256: $CERT32"
+
+          cat > release/release-notes.md <<EOF
+          V0.0.2B (dev_FW-modify only)
+          - 独立开发版，仅来自 dev_FW-modify，不合并 main。
+          - 悬浮窗最近 60 秒曲线改为三值动态坐标：最大值按 50 bpm 向上取整且最低 100；中间值=最大值-50；最小值=最大值×0.2。
+          - 中间值固定显示在从底部向上 40% 高度，曲线使用分段 Y 映射严格对应动态最小/中间/最大值。
+          - 最大值与最小值所在行不画横向虚线，仅中间值显示横向虚线。
+          - applicationId: com.careychi.hrstrap.devfwmodify，可与正式版同时安装。
+          - 桌面名称：心率带伴侣 V0.0.2B；versionName: 0.0.2B。
+          - 本次 APK 使用新生成的一次性独立签名；Signer SHA-256: $CERT32
+          - 同时提供 arm32 (armeabi-v7a) 与 arm64 (arm64-v8a) APK。
+          EOF
+
+      - name: Upload V0.0.2B build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: Heart-Rate-Strap-Companion-V0.0.2B
+          path: release/*.apk
+          if-no-files-found: error
+
+      - name: Remove previous V0.0.2B only if rerunning this one-off build
+        run: |
+          if gh release view v0.0.2B --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release delete v0.0.2B --repo "$GITHUB_REPOSITORY" --cleanup-tag --yes
+          elif gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/v0.0.2B" >/dev/null 2>&1; then
+            gh api --method DELETE "repos/${GITHUB_REPOSITORY}/git/refs/tags/v0.0.2B"
+          fi
+
+      - name: Publish V0.0.2B release from dev_FW-modify
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v0.0.2B
+          target_commitish: ${{ github.sha }}
+          name: V0.0.2B
+          body_path: release/release-notes.md
+          files: |
+            release/Heart-Rate-Strap-Companion-V0.0.2B-arm32.apk
+            release/Heart-Rate-Strap-Companion-V0.0.2B-arm64.apk

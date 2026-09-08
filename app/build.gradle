@@ -7,11 +7,12 @@ android {
     compileSdk 35
 
     defaultConfig {
-        applicationId 'com.careychi.hrstrap'
+        // V0.0.2B is intentionally a separate installable app, not an update of the main build.
+        applicationId 'com.careychi.hrstrap.devfwmodify'
         minSdk 26
         targetSdk 35
         versionCode 2
-        versionName '0.0.2'
+        versionName '0.0.2B'
         testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
     }
 
@@ -30,9 +31,8 @@ android {
     buildTypes {
         release {
             minifyEnabled false
-            // V0.0.2 uses the standard debug keystore so CI can produce directly installable APKs.
-            // Replace this with a GitHub-Secrets-backed release keystore before production distribution.
-            signingConfig signingConfigs.debug
+            // This one-off branch deliberately emits unsigned release APKs. The dedicated
+            // dev_FW-modify workflow signs them with a newly generated V0.0.2B-only key.
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
     }
