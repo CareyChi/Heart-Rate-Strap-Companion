@@ -12,6 +12,9 @@ public interface HeartRateDao {
     @Insert void insertSample(HeartRateSample sample);
     @Update void updateSession(RecordingSession session);
 
+    @Query("DELETE FROM recording_session WHERE id = :id")
+    void deleteSession(long id);
+
     @Query("SELECT * FROM recording_session ORDER BY startTimeMs DESC")
     List<RecordingSession> getSessions();
 
