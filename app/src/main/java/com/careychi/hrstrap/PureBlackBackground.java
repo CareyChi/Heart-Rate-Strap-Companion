@@ -3,6 +3,7 @@ package com.careychi.hrstrap;
 import android.app.Activity;
 import android.app.Application;
 import android.content.Context;
+import android.os.Build;
 import android.os.Bundle;
 import android.view.Window;
 import com.careychi.hrstrap.ui.Ui;
@@ -45,6 +46,9 @@ public final class PureBlackBackground {
         window.setStatusBarColor(background);
         window.setNavigationBarColor(background);
         window.getDecorView().setBackgroundColor(background);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            window.getDecorView().setForceDarkAllowed(false);
+        }
     }
 
     private static final class WindowBackgroundCallbacks implements Application.ActivityLifecycleCallbacks {
