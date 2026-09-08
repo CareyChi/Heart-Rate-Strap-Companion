@@ -23,7 +23,6 @@ public final class Ui {
     public static int SURFACE_2 = DEFAULT_SURFACE_2;
     public static int BUTTON_BG = DEFAULT_BUTTON_BG;
     public static int ICON_BUTTON_BG = DEFAULT_ICON_BUTTON_BG;
-    private static volatile boolean pureBlackMode;
 
     public static final int ACCENT = Color.rgb(72, 240, 164);
     public static final int TEXT = Color.rgb(241, 250, 246);
@@ -33,10 +32,9 @@ public final class Ui {
 
     /**
      * Pure-black mode changes the page canvas to true black while preserving gray card/component
-     * surfaces so their boundaries remain visible. The service-hosted overlay stays true black.
+     * surfaces so their boundaries remain visible.
      */
     public static synchronized void applyPureBlackBackground(boolean enabled) {
-        pureBlackMode = enabled;
         if (enabled) {
             BG = Color.BLACK;
             SURFACE = DEFAULT_SURFACE;
@@ -75,10 +73,10 @@ public final class Ui {
     public static GradientDrawable rounded(int color, float radiusDp, Context c) {
         GradientDrawable d = new GradientDrawable();
         int resolvedColor = color;
-        // The floating window is created from HeartRateService rather than an Activity. Keep its
-        // panel true black in pure-black mode without collapsing Activity card surfaces to black.
-        if (pureBlackMode && c instanceof android.app.Service && color == SURFACE) {
-            resolvedColor = Color.BLACK;
+        // System overlay panels are created by HeartRateService. Their canvas should match the
+        // Activity page canvas exactly, not the lighter card surface color.
+        if (c instanceof android.app.Service && color == SURFACE) {
+            resolvedColor = BG;
         }
         d.setColor(resolvedColor);
         d.setCornerRadius(dp(c, radiusDp));
