@@ -99,7 +99,7 @@ public final class ContinuousRecordingActivity extends AppCompatActivity impleme
         stopButton.setTextColor(Ui.TEXT);
         stopButton.setTextSize(16);
         stopButton.setCornerRadius(Ui.dp(this, 18));
-        stopButton.setBackgroundTintList(android.content.res.ColorStateList.valueOf(Ui.SURFACE_2));
+        stopButton.setBackgroundTintList(android.content.res.ColorStateList.valueOf(Ui.BUTTON_BG));
         stopButton.setStrokeColor(android.content.res.ColorStateList.valueOf(Ui.ACCENT));
         stopButton.setStrokeWidth(Ui.dp(this, 1));
         attachHoldToStop();

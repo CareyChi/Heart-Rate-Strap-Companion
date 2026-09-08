@@ -36,11 +36,11 @@ jobs:
             echo "current=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Check whether V0.0.1 already exists
+      - name: Check whether V0.0.2 already exists
         id: release_check
         if: steps.freshness.outputs.current == 'true'
         run: |
-          if gh release view v0.0.1 --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
+          if gh release view v0.0.2 --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
             echo "exists=true" >> "$GITHUB_OUTPUT"
           else
             echo "exists=false" >> "$GITHUB_OUTPUT"
@@ -71,21 +71,24 @@ jobs:
         run: |
           gradle :app:assembleArm32Release :app:assembleArm64Release --stacktrace
           mkdir -p release
-          cp app/build/outputs/apk/arm32/release/app-arm32-release.apk release/Heart-Rate-Strap-Companion-v0.0.1-arm32.apk
-          cp app/build/outputs/apk/arm64/release/app-arm64-release.apk release/Heart-Rate-Strap-Companion-v0.0.1-arm64.apk
+          cp app/build/outputs/apk/arm32/release/app-arm32-release.apk release/Heart-Rate-Strap-Companion-v0.0.2-arm32.apk
+          cp app/build/outputs/apk/arm64/release/app-arm64-release.apk release/Heart-Rate-Strap-Companion-v0.0.2-arm64.apk
 
-      - name: Publish GitHub Release V0.0.1
+      - name: Publish GitHub Release V0.0.2
         if: steps.freshness.outputs.current == 'true' && steps.release_check.outputs.exists != 'true'
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v0.0.1
+          tag_name: v0.0.2
           target_commitish: ${{ steps.freshness.outputs.sha }}
           files: release/*.apk
-          name: V0.0.1
+          name: V0.0.2
           body: |
-            V0.0.1
-            - 实现标准 BLE Heart Rate Service 心率带连接与持续记录。
-            - 实现实时心率、最新 1 小时可滑动曲线、边缘回弹、绿色渐变、悬浮窗和历史详情。
-            - 骑行记录暂未开发。
+            V0.0.2
+            - 调整悬浮窗心率坐标轴位置：0 固定底部、平均值居中，并将悬浮窗宽度缩小至原来的约 75%。
+            - 主记录曲线在平均心率下方新增一档坐标线。
+            - 心率数字与 bpm 居中，并整体收紧数字横向间距。
+            - 非按钮 UI 背景由深绿色改为夜间模式深灰色，保留原按钮背景色。
+            - 后台运行设置迁移至独立二级菜单。
+            - 新增“防止意外中断”：记录期间每 5 秒增量保存摘要，并在异常中断后提供删除、继续记录、保存已有数据三种处理方式。
+            - 历史记录移除竖向滚动条，并允许最后一条记录滚动到列表中部。
             - 同时提供 arm32 (armeabi-v7a) 与 arm64 (arm64-v8a) APK。
-            - 当前构建使用开发签名以保证 APK 可直接安装；正式长期分发应改用 GitHub Secrets 注入固定 release keystore。

@@ -10,6 +10,7 @@ import android.graphics.PixelFormat;
 import android.os.*;
 import android.provider.Settings;
 import android.view.*;
+import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 import androidx.core.app.ActivityCompat;
@@ -20,6 +21,7 @@ import com.careychi.hrstrap.core.HeartRateAxis;
 import com.careychi.hrstrap.core.HeartRateMeasurementParser;
 import com.careychi.hrstrap.data.*;
 import com.careychi.hrstrap.ui.*;
+import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -28,15 +30,19 @@ import java.util.concurrent.Executors;
 public final class HeartRateService extends Service implements AppVisibility.Listener {
     public static final String ACTION_CONNECT = "com.careychi.hrstrap.CONNECT";
     public static final String ACTION_START_RECORDING = "com.careychi.hrstrap.START_RECORDING";
+    public static final String ACTION_RESUME_RECORDING = "com.careychi.hrstrap.RESUME_RECORDING";
     public static final String ACTION_STOP_RECORDING = "com.careychi.hrstrap.STOP_RECORDING";
     public static final String EXTRA_ADDRESS = "address";
     public static final String EXTRA_NAME = "name";
+    public static final String EXTRA_SESSION_ID = "session_id";
 
     private static final UUID HR_SERVICE = UUID.fromString("0000180d-0000-1000-8000-00805f9b34fb");
     private static final UUID HR_MEASUREMENT = UUID.fromString("00002a37-0000-1000-8000-00805f9b34fb");
     private static final UUID CCCD = UUID.fromString("00002902-0000-1000-8000-00805f9b34fb");
     private static final String CHANNEL_ID = "heart_rate_recording";
     private static final int NOTIFICATION_ID = 18013;
+    private static final int OVERLAY_WIDTH_DP = 173;
+    private static final int OVERLAY_HEIGHT_DP = 150;
 
     private final Handler main = new Handler(Looper.getMainLooper());
     private final ExecutorService dbExecutor = Executors.newSingleThreadExecutor();
@@ -49,6 +55,7 @@ public final class HeartRateService extends Service implements AppVisibility.Lis
     private long sampleSum;
     private int sampleCount;
     private int maxBpm;
+    private long lastRecoverySaveAt;
 
     private WindowManager windowManager;
     private View overlay;
@@ -75,6 +82,7 @@ public final class HeartRateService extends Service implements AppVisibility.Lis
             switch (intent.getAction()) {
                 case ACTION_CONNECT -> connect(intent.getStringExtra(EXTRA_ADDRESS), intent.getStringExtra(EXTRA_NAME));
                 case ACTION_START_RECORDING -> startRecording();
+                case ACTION_RESUME_RECORDING -> resumeRecording(intent.getLongExtra(EXTRA_SESSION_ID, 0));
                 case ACTION_STOP_RECORDING -> stopRecording();
             }
         }
@@ -109,6 +117,10 @@ public final class HeartRateService extends Service implements AppVisibility.Lis
                 dbExecutor.execute(() -> AppDatabase.get(getApplicationContext()).heartRateDao()
                         .insertSample(new HeartRateSample(sessionId, now, bpm)));
                 updateOverlayValues(bpm, maxBpm, avg);
+                if (RecordingRecovery.isEnabled(HeartRateService.this) && now - lastRecoverySaveAt >= 5000) {
+                    lastRecoverySaveAt = now;
+                    persistRecoveryProgress(now, maxBpm, avg);
+                }
             }
             syncOverlayVisibility();
             main.postDelayed(this, 1000);
@@ -118,7 +130,10 @@ public final class HeartRateService extends Service implements AppVisibility.Lis
     private void startRecording() {
         if (recording || sessionId > 0) return;
         final long start = System.currentTimeMillis();
-        sampleSum = 0; sampleCount = 0; maxBpm = 0;
+        sampleSum = 0;
+        sampleCount = 0;
+        maxBpm = 0;
+        lastRecoverySaveAt = start;
         dbExecutor.execute(() -> {
             RecordingSession session = new RecordingSession("CONTINUOUS", start, 0, 0, 0, 0);
             long id = AppDatabase.get(getApplicationContext()).heartRateDao().insertSession(session);
@@ -127,9 +142,64 @@ public final class HeartRateService extends Service implements AppVisibility.Lis
                 ActiveSessionHolder.id = id;
                 startedAt = start;
                 recording = true;
+                RecordingRecovery.markRecording(this, id, start);
                 HeartRateState.get().updateRecording(true, start, 0, 0);
                 syncOverlayVisibility();
             });
+        });
+    }
+
+    private void resumeRecording(long id) {
+        if (recording || sessionId > 0 || id <= 0) return;
+        dbExecutor.execute(() -> {
+            HeartRateDao dao = AppDatabase.get(getApplicationContext()).heartRateDao();
+            RecordingSession session = dao.getSession(id);
+            if (session == null) {
+                RecordingRecovery.clearMarker(this);
+                return;
+            }
+            List<HeartRateSample> samples = dao.getSamples(id);
+            long sum = 0;
+            int count = 0;
+            int max = 0;
+            for (HeartRateSample sample : samples) {
+                if (sample.bpm <= 0) continue;
+                sum += sample.bpm;
+                count++;
+                max = Math.max(max, sample.bpm);
+            }
+            final long restoredSum = sum;
+            final int restoredCount = count;
+            final int restoredMax = max;
+            main.post(() -> {
+                sessionId = id;
+                ActiveSessionHolder.id = id;
+                startedAt = session.startTimeMs;
+                sampleSum = restoredSum;
+                sampleCount = restoredCount;
+                maxBpm = restoredMax;
+                lastRecoverySaveAt = System.currentTimeMillis();
+                recording = true;
+                int avg = sampleCount == 0 ? 0 : (int) Math.round(sampleSum / (double) sampleCount);
+                RecordingRecovery.markRecording(this, id, startedAt);
+                HeartRateState.get().updateRecording(true, startedAt, maxBpm, avg);
+                syncOverlayVisibility();
+            });
+        });
+    }
+
+    private void persistRecoveryProgress(long end, int max, int avg) {
+        final long id = sessionId;
+        final long start = startedAt;
+        if (id <= 0 || start <= 0) return;
+        dbExecutor.execute(() -> {
+            RecordingSession session = AppDatabase.get(getApplicationContext()).heartRateDao().getSession(id);
+            if (session == null || !recording || sessionId != id) return;
+            session.endTimeMs = end;
+            session.durationMs = Math.max(0, end - start);
+            session.maxBpm = max;
+            session.avgBpm = avg;
+            AppDatabase.get(getApplicationContext()).heartRateDao().updateSession(session);
         });
     }
 
@@ -143,12 +213,13 @@ public final class HeartRateService extends Service implements AppVisibility.Lis
         recording = false;
         sessionId = 0;
         ActiveSessionHolder.id = 0;
+        RecordingRecovery.clearMarker(this);
         HeartRateState.get().updateRecording(false, 0, finalMax, finalAvg);
         hideOverlay();
         dbExecutor.execute(() -> {
             HeartRateDao dao = AppDatabase.get(getApplicationContext()).heartRateDao();
             RecordingSession session = dao.getSession(id);
-            if (session != null && session.endTimeMs == 0) {
+            if (session != null) {
                 session.endTimeMs = end;
                 session.durationMs = Math.max(0, end - start);
                 session.maxBpm = finalMax;
@@ -272,27 +343,31 @@ public final class HeartRateService extends Service implements AppVisibility.Lis
         root.setElevation(Ui.dp(this, 12));
 
         LinearLayout top = Ui.row(this);
+        top.setGravity(Gravity.CENTER);
         overlayBpm = new TripleDigitView(this, 42);
         TextView bpm = Ui.text(this, "bpm", 16, Ui.TEXT);
         top.addView(overlayBpm);
         top.addView(bpm);
-        root.addView(top);
+        root.addView(top, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
         LinearLayout lower = Ui.row(this);
-        LinearLayout axis = Ui.column(this);
+        FrameLayout axis = new FrameLayout(this);
         overlayMax = new TripleDigitView(this, 10);
         overlayAvg = new TripleDigitView(this, 10);
         overlayZero = new TripleDigitView(this, 10);
-        axis.addView(overlayMax);
-        axis.addView(overlayAvg);
-        axis.addView(overlayZero);
+        FrameLayout.LayoutParams maxLp = new FrameLayout.LayoutParams(Ui.dp(this, 32), ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.TOP | Gravity.CENTER_HORIZONTAL);
+        FrameLayout.LayoutParams avgLp = new FrameLayout.LayoutParams(Ui.dp(this, 32), ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.CENTER);
+        FrameLayout.LayoutParams zeroLp = new FrameLayout.LayoutParams(Ui.dp(this, 32), ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL);
+        axis.addView(overlayMax, maxLp);
+        axis.addView(overlayAvg, avgLp);
+        axis.addView(overlayZero, zeroLp);
         miniTrend = new MiniTrendView(this);
-        lower.addView(axis, new LinearLayout.LayoutParams(Ui.dp(this, 48), Ui.dp(this, 86)));
-        lower.addView(miniTrend, new LinearLayout.LayoutParams(Ui.dp(this, 150), Ui.dp(this, 86)));
-        root.addView(lower);
+        lower.addView(axis, new LinearLayout.LayoutParams(Ui.dp(this, 34), Ui.dp(this, 86)));
+        lower.addView(miniTrend, new LinearLayout.LayoutParams(0, Ui.dp(this, 86), 1));
+        root.addView(lower, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, Ui.dp(this, 86)));
 
         overlayParams = new WindowManager.LayoutParams(
-                Ui.dp(this, 230), Ui.dp(this, 150),
+                Ui.dp(this, OVERLAY_WIDTH_DP), Ui.dp(this, OVERLAY_HEIGHT_DP),
                 WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
                 WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
                 PixelFormat.TRANSLUCENT);
@@ -336,17 +411,21 @@ public final class HeartRateService extends Service implements AppVisibility.Lis
             @Override public boolean onTouch(View v, android.view.MotionEvent event) {
                 switch (event.getActionMasked()) {
                     case android.view.MotionEvent.ACTION_DOWN -> {
-                        downRawX = event.getRawX(); downRawY = event.getRawY();
-                        startX = overlayParams.x; startY = overlayParams.y;
-                        downAt = System.currentTimeMillis(); moved = false;
+                        downRawX = event.getRawX();
+                        downRawY = event.getRawY();
+                        startX = overlayParams.x;
+                        startY = overlayParams.y;
+                        downAt = System.currentTimeMillis();
+                        moved = false;
                         return true;
                     }
                     case android.view.MotionEvent.ACTION_MOVE -> {
-                        float dx = event.getRawX() - downRawX, dy = event.getRawY() - downRawY;
+                        float dx = event.getRawX() - downRawX;
+                        float dy = event.getRawY() - downRawY;
                         if (Math.hypot(dx, dy) > Ui.dp(HeartRateService.this, 6)) moved = true;
                         if (moved && windowManager != null && overlay != null) {
-                            int maxX = Math.max(0, getResources().getDisplayMetrics().widthPixels - Ui.dp(HeartRateService.this, 230));
-                            int maxY = Math.max(0, getResources().getDisplayMetrics().heightPixels - Ui.dp(HeartRateService.this, 150));
+                            int maxX = Math.max(0, getResources().getDisplayMetrics().widthPixels - Ui.dp(HeartRateService.this, OVERLAY_WIDTH_DP));
+                            int maxY = Math.max(0, getResources().getDisplayMetrics().heightPixels - Ui.dp(HeartRateService.this, OVERLAY_HEIGHT_DP));
                             overlayParams.x = Math.max(0, Math.min(maxX, startX + Math.round(dx)));
                             overlayParams.y = Math.max(0, Math.min(maxY, startY + Math.round(dy)));
                             try { windowManager.updateViewLayout(overlay, overlayParams); } catch (Exception ignored) {}

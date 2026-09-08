@@ -18,7 +18,7 @@ public final class TripleDigitView extends LinearLayout {
             TextView d = Ui.text(context, " ", textSp, Ui.TEXT);
             d.setTypeface(Typeface.create("sans-serif", Typeface.BOLD));
             d.setGravity(Gravity.CENTER);
-            int width = Ui.dp(context, textSp * 0.74f);
+            int width = Ui.dp(context, textSp * 0.64f);
             addView(d, new LayoutParams(width, LayoutParams.WRAP_CONTENT));
             digits[i] = d;
         }

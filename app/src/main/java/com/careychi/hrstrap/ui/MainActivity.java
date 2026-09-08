@@ -7,6 +7,7 @@ import android.bluetooth.BluetoothManager;
 import android.bluetooth.le.*;
 import android.content.*;
 import android.content.pm.PackageManager;
+import android.graphics.Color;
 import android.os.*;
 import android.view.*;
 import android.widget.*;
@@ -16,9 +17,12 @@ import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.content.ContextCompat;
 import com.careychi.hrstrap.HeartRateState;
+import com.careychi.hrstrap.data.RecordingRecovery;
 import com.careychi.hrstrap.service.HeartRateService;
 import com.google.android.material.button.MaterialButton;
 import java.util.*;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 public final class MainActivity extends AppCompatActivity implements HeartRateState.Listener {
     private static final android.os.ParcelUuid HR_SERVICE = android.os.ParcelUuid.fromString("0000180d-0000-1000-8000-00805f9b34fb");
@@ -29,6 +33,7 @@ public final class MainActivity extends AppCompatActivity implements HeartRateSt
     private BluetoothLeScanner scanner;
     private final LinkedHashMap<String, ScanResult> scanResults = new LinkedHashMap<>();
     private final Handler handler = new Handler(Looper.getMainLooper());
+    private final ExecutorService recoveryExecutor = Executors.newSingleThreadExecutor();
 
     private final ActivityResultLauncher<String[]> permissions = registerForActivityResult(
             new ActivityResultContracts.RequestMultiplePermissions(), result -> {});
@@ -36,7 +41,7 @@ public final class MainActivity extends AppCompatActivity implements HeartRateSt
     @Override protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         buildUi();
-        maybeShowFirstRunGuide();
+        if (!maybeShowInterruptedRecording()) maybeShowFirstRunGuide();
         requestRuntimePermissions();
     }
 
@@ -48,6 +53,11 @@ public final class MainActivity extends AppCompatActivity implements HeartRateSt
     @Override protected void onStop() {
         HeartRateState.get().removeListener(this);
         super.onStop();
+    }
+
+    @Override protected void onDestroy() {
+        recoveryExecutor.shutdownNow();
+        super.onDestroy();
     }
 
     private void buildUi() {
@@ -69,7 +79,8 @@ public final class MainActivity extends AppCompatActivity implements HeartRateSt
         top.addView(history, new LinearLayout.LayoutParams(Ui.dp(this, 48), Ui.dp(this, 48)));
         root.addView(top);
 
-        Space s1 = new Space(this); root.addView(s1, new LinearLayout.LayoutParams(1, Ui.dp(this, 34)));
+        Space s1 = new Space(this);
+        root.addView(s1, new LinearLayout.LayoutParams(1, Ui.dp(this, 34)));
 
         LinearLayout deviceCard = Ui.row(this);
         deviceCard.setBackground(Ui.rounded(Ui.SURFACE, 20, this));
@@ -99,7 +110,8 @@ public final class MainActivity extends AppCompatActivity implements HeartRateSt
         MaterialButton riding = primaryButton("骑行记录 · 即将推出");
         riding.setEnabled(false);
         center.addView(riding, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, Ui.dp(this, 62)));
-        Space gap = new Space(this); center.addView(gap, new LinearLayout.LayoutParams(1, Ui.dp(this, 24)));
+        Space gap = new Space(this);
+        center.addView(gap, new LinearLayout.LayoutParams(1, Ui.dp(this, 24)));
         continuous = primaryButton("持续记录");
         continuous.setOnClickListener(v -> beginContinuousRecording());
         center.addView(continuous, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, Ui.dp(this, 62)));
@@ -111,7 +123,7 @@ public final class MainActivity extends AppCompatActivity implements HeartRateSt
     private TextView iconButton(String symbol) {
         TextView v = Ui.text(this, symbol, 24, Ui.TEXT);
         v.setGravity(Gravity.CENTER);
-        v.setBackground(Ui.rounded(Ui.SURFACE, 14, this));
+        v.setBackground(Ui.rounded(Ui.ICON_BUTTON_BG, 14, this));
         return v;
     }
 
@@ -121,10 +133,38 @@ public final class MainActivity extends AppCompatActivity implements HeartRateSt
         b.setTextSize(17);
         b.setTextColor(Ui.TEXT);
         b.setCornerRadius(Ui.dp(this, 18));
-        b.setBackgroundTintList(android.content.res.ColorStateList.valueOf(Ui.SURFACE_2));
+        b.setBackgroundTintList(android.content.res.ColorStateList.valueOf(Ui.BUTTON_BG));
         b.setStrokeColor(android.content.res.ColorStateList.valueOf(Ui.ACCENT));
         b.setStrokeWidth(Ui.dp(this, 1));
         return b;
+    }
+
+    private boolean maybeShowInterruptedRecording() {
+        if (!RecordingRecovery.hasInterruptedRecording(this)) return false;
+        final long interruptedSessionId = RecordingRecovery.sessionId(this);
+        AlertDialog dialog = new AlertDialog.Builder(this)
+                .setTitle("上次记录发生意外中断")
+                .setMessage("检测到上次记录未正常结束，请选择处理方式。")
+                .setNegativeButton("删除这条记录", (d, which) -> recoveryExecutor.execute(
+                        () -> RecordingRecovery.deleteInterruptedSession(getApplicationContext(), interruptedSessionId)))
+                .setNeutralButton("继续记录", (d, which) -> {
+                    Intent resume = new Intent(this, HeartRateService.class)
+                            .setAction(HeartRateService.ACTION_RESUME_RECORDING)
+                            .putExtra(HeartRateService.EXTRA_SESSION_ID, interruptedSessionId);
+                    ContextCompat.startForegroundService(this, resume);
+                    startActivity(new Intent(this, ContinuousRecordingActivity.class));
+                })
+                .setPositiveButton("保存已有数据", (d, which) -> recoveryExecutor.execute(
+                        () -> RecordingRecovery.finalizeSession(getApplicationContext(), interruptedSessionId)))
+                .create();
+        dialog.setOnShowListener(d -> {
+            dialog.getButton(AlertDialog.BUTTON_NEGATIVE).setTextColor(Color.rgb(255, 92, 92));
+            dialog.getButton(AlertDialog.BUTTON_NEUTRAL).setTextColor(Color.rgb(255, 196, 64));
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setTextColor(Color.rgb(72, 240, 164));
+        });
+        dialog.setCancelable(false);
+        dialog.show();
+        return true;
     }
 
     private void maybeShowFirstRunGuide() {
@@ -153,7 +193,10 @@ public final class MainActivity extends AppCompatActivity implements HeartRateSt
 
     @SuppressLint("MissingPermission")
     private void scanForHeartRateDevices() {
-        if (!hasBlePermissions()) { requestRuntimePermissions(); return; }
+        if (!hasBlePermissions()) {
+            requestRuntimePermissions();
+            return;
+        }
         BluetoothManager manager = getSystemService(BluetoothManager.class);
         if (manager == null || manager.getAdapter() == null || !manager.getAdapter().isEnabled()) {
             Toast.makeText(this, "请先开启蓝牙", Toast.LENGTH_SHORT).show();

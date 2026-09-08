@@ -29,7 +29,7 @@ public final class FixedSlotTextView extends LinearLayout {
             TextView slot = Ui.text(getContext(), " ", textSp, color);
             slot.setTypeface(Typeface.MONOSPACE, Typeface.NORMAL);
             slot.setGravity(Gravity.CENTER);
-            addView(slot, new LayoutParams(Ui.dp(getContext(), textSp * 0.68f), LayoutParams.WRAP_CONTENT));
+            addView(slot, new LayoutParams(Ui.dp(getContext(), textSp * 0.58f), LayoutParams.WRAP_CONTENT));
         }
         for (int i = 0; i < getChildCount(); i++) {
             TextView slot = (TextView) getChildAt(i);

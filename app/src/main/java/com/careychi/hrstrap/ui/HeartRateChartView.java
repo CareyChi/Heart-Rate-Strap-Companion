@@ -87,7 +87,10 @@ public final class HeartRateChartView extends View {
         }
         int avg = count == 0 ? 0 : (int) Math.round((double) sum / count);
         HeartRateAxis.Bands bands = HeartRateAxis.forChart(max, avg);
-        int[] labels = {bands.maxBand(), bands.midBand(), bands.avgBand(), 0};
+        int lowerAvgBand = Math.max(0, bands.avgBand() - 25);
+        int[] candidates = {bands.maxBand(), bands.midBand(), bands.avgBand(), lowerAvgBand, 0};
+        ArrayList<Integer> labels = new ArrayList<>();
+        for (int value : candidates) if (!labels.contains(value)) labels.add(value);
 
         for (int value : labels) {
             float y = yFor(value, bands.maxBand(), top, bottom);
