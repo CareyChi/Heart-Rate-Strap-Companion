@@ -47,7 +47,7 @@ public final class ContinuousRecordingActivity extends AppCompatActivity impleme
     private void buildUi() {
         LinearLayout root = Ui.column(this);
         root.setBackgroundColor(Ui.BG);
-        root.setPadding(Ui.dp(this, 20), Ui.dp(this, 16), Ui.dp(this, 20), Ui.dp(this, 18));
+        root.setPadding(Ui.dp(this, 20), Ui.dp(this, 26), Ui.dp(this, 20), Ui.dp(this, 18));
 
         LinearLayout top = Ui.row(this);
         TextView back = Ui.text(this, "‹", 36, Ui.TEXT);
@@ -69,7 +69,10 @@ public final class ContinuousRecordingActivity extends AppCompatActivity impleme
         bpmDigits.setUnavailable();
         hero.addView(bpmDigits);
         TextView bpm = Ui.text(this, "bpm", 18, Ui.MUTED);
-        hero.addView(bpm);
+        LinearLayout.LayoutParams bpmLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        bpmLp.leftMargin = Ui.dp(this, 6);
+        bpm.setTranslationY(Ui.dp(this, 9));
+        hero.addView(bpm, bpmLp);
         root.addView(hero, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, Ui.dp(this, 180)));
 
         LinearLayout metrics = Ui.row(this);
@@ -107,7 +110,11 @@ public final class ContinuousRecordingActivity extends AppCompatActivity impleme
         digits.setUnavailable();
         if (maximum) maxDigits = digits; else avgDigits = digits;
         box.addView(digits);
-        box.addView(Ui.text(this, " bpm", 11, Ui.MUTED));
+        TextView bpm = Ui.text(this, "bpm", 11, Ui.MUTED);
+        LinearLayout.LayoutParams bpmLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        bpmLp.leftMargin = Ui.dp(this, 3);
+        bpm.setTranslationY(Ui.dp(this, 2));
+        box.addView(bpm, bpmLp);
         return box;
     }
 
