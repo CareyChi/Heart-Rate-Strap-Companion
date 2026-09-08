@@ -20,6 +20,7 @@ import com.careychi.hrstrap.core.HeartRateAxis;
 import com.careychi.hrstrap.core.HeartRateMeasurementParser;
 import com.careychi.hrstrap.data.*;
 import com.careychi.hrstrap.ui.*;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
@@ -43,6 +44,11 @@ public final class HeartRateService extends Service implements AppVisibility.Lis
     private static final int OVERLAY_WIDTH_DP = 173;
     private static final int OVERLAY_HEIGHT_DP = 150;
 
+    /** Process-local samples keep the live chart working even when persistence is intentionally deferred. */
+    public record LiveSample(long timestampMs, int bpm) {}
+    private static final Object LIVE_SAMPLE_LOCK = new Object();
+    private static final ArrayList<LiveSample> LIVE_SAMPLES = new ArrayList<>();
+
     private final Handler main = new Handler(Looper.getMainLooper());
     private final ExecutorService dbExecutor = Executors.newSingleThreadExecutor();
     private BluetoothGatt gatt;
@@ -51,6 +57,8 @@ public final class HeartRateService extends Service implements AppVisibility.Lis
     private volatile boolean recording;
     private volatile long sessionId;
     private volatile long startedAt;
+    private boolean startingRecording;
+    private boolean recoveryBackedRecording;
     private long sampleSum;
     private int sampleCount;
     private int maxBpm;
@@ -65,6 +73,43 @@ public final class HeartRateService extends Service implements AppVisibility.Lis
 
     public static long activeSessionId() { return ActiveSessionHolder.id; }
     private static final class ActiveSessionHolder { static volatile long id; }
+
+    public static List<LiveSample> liveSamplesSince(long afterExclusive) {
+        synchronized (LIVE_SAMPLE_LOCK) {
+            ArrayList<LiveSample> result = new ArrayList<>();
+            for (LiveSample sample : LIVE_SAMPLES) {
+                if (sample.timestampMs() > afterExclusive) result.add(sample);
+            }
+            return result;
+        }
+    }
+
+    private static List<LiveSample> liveSamplesSnapshot() {
+        synchronized (LIVE_SAMPLE_LOCK) {
+            return new ArrayList<>(LIVE_SAMPLES);
+        }
+    }
+
+    private static void clearLiveSamples() {
+        synchronized (LIVE_SAMPLE_LOCK) {
+            LIVE_SAMPLES.clear();
+        }
+    }
+
+    private static void addLiveSample(long timestampMs, int bpm) {
+        synchronized (LIVE_SAMPLE_LOCK) {
+            LIVE_SAMPLES.add(new LiveSample(timestampMs, bpm));
+        }
+    }
+
+    private static void restoreLiveSamples(List<HeartRateSample> samples) {
+        synchronized (LIVE_SAMPLE_LOCK) {
+            LIVE_SAMPLES.clear();
+            for (HeartRateSample sample : samples) {
+                if (sample.bpm > 0) LIVE_SAMPLES.add(new LiveSample(sample.timestampMs, sample.bpm));
+            }
+        }
+    }
 
     @Override public void onCreate() {
         super.onCreate();
@@ -103,18 +148,24 @@ public final class HeartRateService extends Service implements AppVisibility.Lis
 
     private final Runnable tick = new Runnable() {
         @Override public void run() {
-            if (recording && sessionId > 0 && latestBpm > 0) {
+            if (recording && latestBpm > 0) {
                 final int bpm = latestBpm;
                 final long now = System.currentTimeMillis();
                 sampleSum += bpm;
                 sampleCount++;
                 maxBpm = Math.max(maxBpm, bpm);
                 int avg = (int) Math.round(sampleSum / (double) sampleCount);
+                addLiveSample(now, bpm);
                 HeartRateState.get().updateRecording(true, startedAt, maxBpm, avg);
-                dbExecutor.execute(() -> AppDatabase.get(getApplicationContext()).heartRateDao()
-                        .insertSample(new HeartRateSample(sessionId, now, bpm)));
+
+                final long persistentSessionId = sessionId;
+                if (recoveryBackedRecording && persistentSessionId > 0) {
+                    dbExecutor.execute(() -> AppDatabase.get(getApplicationContext()).heartRateDao()
+                            .insertSample(new HeartRateSample(persistentSessionId, now, bpm)));
+                }
+
                 updateOverlayValues(bpm, maxBpm, avg);
-                if (RecordingRecovery.isEnabled(HeartRateService.this) && now - lastRecoverySaveAt >= 5000) {
+                if (recoveryBackedRecording && persistentSessionId > 0 && now - lastRecoverySaveAt >= 5000) {
                     lastRecoverySaveAt = now;
                     persistRecoveryProgress(now, maxBpm, avg);
                 }
@@ -125,34 +176,62 @@ public final class HeartRateService extends Service implements AppVisibility.Lis
     };
 
     private void startRecording() {
-        if (recording || sessionId > 0) return;
+        if (recording || startingRecording || sessionId > 0) return;
         final long start = System.currentTimeMillis();
+        final boolean protectAgainstInterruption = RecordingRecovery.isEnabled(this);
+        startingRecording = true;
+        recoveryBackedRecording = protectAgainstInterruption;
+        startedAt = start;
         sampleSum = 0;
         sampleCount = 0;
         maxBpm = 0;
         lastRecoverySaveAt = start;
+        clearLiveSamples();
+
+        if (!protectAgainstInterruption) {
+            startingRecording = false;
+            sessionId = 0;
+            ActiveSessionHolder.id = 0;
+            recording = true;
+            RecordingRecovery.clearMarker(this);
+            HeartRateState.get().updateRecording(true, start, 0, 0);
+            syncOverlayVisibility();
+            return;
+        }
+
         dbExecutor.execute(() -> {
-            RecordingSession session = new RecordingSession("CONTINUOUS", start, 0, 0, 0, 0);
-            long id = AppDatabase.get(getApplicationContext()).heartRateDao().insertSession(session);
-            main.post(() -> {
-                sessionId = id;
-                ActiveSessionHolder.id = id;
-                startedAt = start;
-                recording = true;
-                RecordingRecovery.markRecording(this, id, start);
-                HeartRateState.get().updateRecording(true, start, 0, 0);
-                syncOverlayVisibility();
-            });
+            try {
+                RecordingSession session = new RecordingSession("CONTINUOUS", start, 0, 0, 0, 0);
+                long id = AppDatabase.get(getApplicationContext()).heartRateDao().insertSession(session);
+                main.post(() -> {
+                    startingRecording = false;
+                    sessionId = id;
+                    ActiveSessionHolder.id = id;
+                    startedAt = start;
+                    recoveryBackedRecording = true;
+                    recording = true;
+                    RecordingRecovery.markRecording(this, id, start);
+                    HeartRateState.get().updateRecording(true, start, 0, 0);
+                    syncOverlayVisibility();
+                });
+            } catch (RuntimeException e) {
+                main.post(() -> {
+                    startingRecording = false;
+                    recoveryBackedRecording = false;
+                });
+            }
         });
     }
 
     private void resumeRecording(long id) {
-        if (recording || sessionId > 0 || id <= 0) return;
+        if (recording || startingRecording || sessionId > 0 || id <= 0) return;
+        startingRecording = true;
         dbExecutor.execute(() -> {
             HeartRateDao dao = AppDatabase.get(getApplicationContext()).heartRateDao();
             RecordingSession session = dao.getSession(id);
             if (session == null) {
                 RecordingRecovery.clearMarker(this);
+                main.post(() -> startingRecording = false);
                 return;
             }
             List<HeartRateSample> samples = dao.getSamples(id);
@@ -169,6 +248,7 @@ public final class HeartRateService extends Service implements AppVisibility.Lis
             final int restoredCount = count;
             final int restoredMax = max;
             main.post(() -> {
+                startingRecording = false;
                 sessionId = id;
                 ActiveSessionHolder.id = id;
                 startedAt = session.startTimeMs;
@@ -176,6 +256,8 @@ public final class HeartRateService extends Service implements AppVisibility.Lis
                 sampleCount = restoredCount;
                 maxBpm = restoredMax;
                 lastRecoverySaveAt = System.currentTimeMillis();
+                recoveryBackedRecording = true;
+                restoreLiveSamples(samples);
                 recording = true;
                 int avg = sampleCount == 0 ? 0 : (int) Math.round(sampleSum / (double) sampleCount);
                 RecordingRecovery.markRecording(this, id, startedAt);
@@ -188,10 +270,10 @@ public final class HeartRateService extends Service implements AppVisibility.Lis
     private void persistRecoveryProgress(long end, int max, int avg) {
         final long id = sessionId;
         final long start = startedAt;
-        if (id <= 0 || start <= 0) return;
+        if (!recoveryBackedRecording || id <= 0 || start <= 0) return;
         dbExecutor.execute(() -> {
             RecordingSession session = AppDatabase.get(getApplicationContext()).heartRateDao().getSession(id);
-            if (session == null || !recording || sessionId != id) return;
+            if (session == null || !recording || !recoveryBackedRecording || sessionId != id) return;
             session.endTimeMs = end;
             session.durationMs = Math.max(0, end - start);
             session.maxBpm = max;
@@ -201,27 +283,43 @@ public final class HeartRateService extends Service implements AppVisibility.Lis
     }
 
     private void stopRecording() {
-        if (!recording || sessionId <= 0) return;
+        if (!recording) return;
+        final boolean wasRecoveryBacked = recoveryBackedRecording;
         final long id = sessionId;
         final long start = startedAt;
         final long end = System.currentTimeMillis();
         final int finalMax = maxBpm;
         final int finalAvg = sampleCount == 0 ? 0 : (int) Math.round(sampleSum / (double) sampleCount);
+        final List<LiveSample> bufferedSamples = liveSamplesSnapshot();
+
         recording = false;
+        startingRecording = false;
+        recoveryBackedRecording = false;
         sessionId = 0;
         ActiveSessionHolder.id = 0;
         RecordingRecovery.clearMarker(this);
         HeartRateState.get().updateRecording(false, 0, finalMax, finalAvg);
         hideOverlay();
+
         dbExecutor.execute(() -> {
             HeartRateDao dao = AppDatabase.get(getApplicationContext()).heartRateDao();
-            RecordingSession session = dao.getSession(id);
-            if (session != null) {
-                session.endTimeMs = end;
-                session.durationMs = Math.max(0, end - start);
-                session.maxBpm = finalMax;
-                session.avgBpm = finalAvg;
-                dao.updateSession(session);
+            if (wasRecoveryBacked && id > 0) {
+                RecordingSession session = dao.getSession(id);
+                if (session != null) {
+                    session.endTimeMs = end;
+                    session.durationMs = Math.max(0, end - start);
+                    session.maxBpm = finalMax;
+                    session.avgBpm = finalAvg;
+                    dao.updateSession(session);
+                }
+                return;
+            }
+
+            RecordingSession session = new RecordingSession(
+                    "CONTINUOUS", start, end, Math.max(0, end - start), finalMax, finalAvg);
+            long completedSessionId = dao.insertSession(session);
+            for (LiveSample sample : bufferedSamples) {
+                dao.insertSample(new HeartRateSample(completedSessionId, sample.timestampMs(), sample.bpm()));
             }
         });
     }
