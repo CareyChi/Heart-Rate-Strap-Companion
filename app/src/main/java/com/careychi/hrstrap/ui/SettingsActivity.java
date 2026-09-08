@@ -5,6 +5,7 @@ import android.os.Bundle;
 import android.view.*;
 import android.widget.*;
 import androidx.appcompat.app.AppCompatActivity;
+import com.careychi.hrstrap.OledBurnInProtection;
 import com.careychi.hrstrap.data.RecordingRecovery;
 
 public final class SettingsActivity extends AppCompatActivity {
@@ -63,6 +64,26 @@ public final class SettingsActivity extends AppCompatActivity {
         LinearLayout.LayoutParams recoveryLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         recoveryLp.topMargin = Ui.dp(this, 14);
         root.addView(recovery, recoveryLp);
+
+        LinearLayout oled = Ui.column(this);
+        oled.setBackground(Ui.rounded(Ui.SURFACE, 20, this));
+        Ui.pad(oled, 16);
+        LinearLayout oledRow = Ui.row(this);
+        TextView oledTitle = Ui.text(this, "OLED防烧屏", 18, Ui.TEXT);
+        oledRow.addView(oledTitle, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
+        Switch oledToggle = new Switch(this);
+        oledToggle.setChecked(OledBurnInProtection.isEnabled(this));
+        oledToggle.setOnCheckedChangeListener((buttonView, isChecked) -> OledBurnInProtection.setEnabled(this, isChecked));
+        oledRow.addView(oledToggle);
+        oled.addView(oledRow);
+        TextView oledNote = Ui.text(this, "开启后每60秒在约2dp范围内轻微移动界面，分散固定像素长时间持续发光；关闭后立即归位。", 12, Ui.MUTED);
+        oledNote.setTypeface(android.graphics.Typeface.create("sans-serif", android.graphics.Typeface.NORMAL));
+        oledNote.setAlpha(0.82f);
+        oledNote.setPadding(0, Ui.dp(this, 6), 0, 0);
+        oled.addView(oledNote);
+        LinearLayout.LayoutParams oledLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        oledLp.topMargin = Ui.dp(this, 14);
+        root.addView(oled, oledLp);
 
         setContentView(root);
     }
