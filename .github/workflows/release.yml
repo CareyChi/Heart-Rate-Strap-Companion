@@ -36,46 +36,45 @@ jobs:
             echo "current=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Check whether V0.0.2 already exists
-        id: release_check
-        if: steps.freshness.outputs.current == 'true'
-        run: |
-          if gh release view v0.0.2 --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
-            echo "exists=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "exists=false" >> "$GITHUB_OUTPUT"
-          fi
-
       - uses: actions/checkout@v4
-        if: steps.freshness.outputs.current == 'true' && steps.release_check.outputs.exists != 'true'
+        if: steps.freshness.outputs.current == 'true'
         with:
           ref: ${{ steps.freshness.outputs.sha }}
 
       - uses: actions/setup-java@v4
-        if: steps.freshness.outputs.current == 'true' && steps.release_check.outputs.exists != 'true'
+        if: steps.freshness.outputs.current == 'true'
         with:
           distribution: temurin
           java-version: '17'
 
       - uses: gradle/actions/setup-gradle@v4
-        if: steps.freshness.outputs.current == 'true' && steps.release_check.outputs.exists != 'true'
+        if: steps.freshness.outputs.current == 'true'
         with:
           gradle-version: '8.9'
 
       - name: Re-run release gate
-        if: steps.freshness.outputs.current == 'true' && steps.release_check.outputs.exists != 'true'
+        if: steps.freshness.outputs.current == 'true'
         run: gradle :core:test :app:testArm32DebugUnitTest :app:testArm64DebugUnitTest :app:lintArm32Debug :app:lintArm64Debug --stacktrace
 
       - name: Build APKs
-        if: steps.freshness.outputs.current == 'true' && steps.release_check.outputs.exists != 'true'
+        if: steps.freshness.outputs.current == 'true'
         run: |
           gradle :app:assembleArm32Release :app:assembleArm64Release --stacktrace
           mkdir -p release
           cp app/build/outputs/apk/arm32/release/app-arm32-release.apk release/Heart-Rate-Strap-Companion-v0.0.2-arm32.apk
           cp app/build/outputs/apk/arm64/release/app-arm64-release.apk release/Heart-Rate-Strap-Companion-v0.0.2-arm64.apk
 
-      - name: Publish GitHub Release V0.0.2
-        if: steps.freshness.outputs.current == 'true' && steps.release_check.outputs.exists != 'true'
+      - name: Remove previous V0.0.2 release after successful build
+        if: steps.freshness.outputs.current == 'true'
+        run: |
+          if gh release view v0.0.2 --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
+            gh release delete v0.0.2 --repo "${GITHUB_REPOSITORY}" --cleanup-tag --yes
+          elif gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/v0.0.2" >/dev/null 2>&1; then
+            gh api --method DELETE "repos/${GITHUB_REPOSITORY}/git/refs/tags/v0.0.2"
+          fi
+
+      - name: Publish replacement GitHub Release V0.0.2
+        if: steps.freshness.outputs.current == 'true'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v0.0.2
@@ -84,11 +83,10 @@ jobs:
           name: V0.0.2
           body: |
             V0.0.2
-            - 调整悬浮窗心率坐标轴位置：0 固定底部、平均值居中，并将悬浮窗宽度缩小至原来的约 75%。
-            - 主记录曲线在平均心率下方新增一档坐标线。
-            - 心率数字与 bpm 居中，并整体收紧数字横向间距。
-            - 非按钮 UI 背景由深绿色改为夜间模式深灰色，保留原按钮背景色。
-            - 后台运行设置迁移至独立二级菜单。
-            - 新增“防止意外中断”：记录期间每 5 秒增量保存摘要，并在异常中断后提供删除、继续记录、保存已有数据三种处理方式。
-            - 历史记录移除竖向滚动条，并允许最后一条记录滚动到列表中部。
+            - 进一步收紧全局 BPM、日期、时长等数字的横向排列间距。
+            - 重新设计悬浮窗心率坐标轴，仅显示最大值和平均值两个档位。
+            - 悬浮窗平均值档位由向上取整改为按 25 bpm 向下取整。
+            - 坐标轴与右侧 60 秒心率曲线共用同一缩放范围和 Y 坐标，标签会随数值变化与曲线真实位置对齐。
+            - 缩小坐标轴左右占用与图表间距，在不增加悬浮窗总宽度的情况下加宽心率曲线显示区域。
+            - 保留 V0.0.2 的深灰 UI、后台运行二级菜单、防止意外中断及历史列表滚动优化。
             - 同时提供 arm32 (armeabi-v7a) 与 arm64 (arm64-v8a) APK。
