@@ -23,15 +23,20 @@ public final class RecordingRecovery {
     }
 
     public static void setEnabled(Context context, boolean enabled) {
-        prefs(context).edit().putBoolean(KEY_ENABLED, enabled).apply();
-        if (!enabled) clearMarker(context);
+        SharedPreferences p = prefs(context);
+        p.edit().putBoolean(KEY_ENABLED, enabled).apply();
+        // Changing the setting applies to the next recording. An already-protected recording
+        // keeps its marker until the user stops, saves, deletes, or resumes it.
+        if (!enabled && !isRecordingMarked(context)) clearMarker(context);
+    }
+
+    public static boolean isRecordingMarked(Context context) {
+        SharedPreferences p = prefs(context);
+        return p.getBoolean(KEY_RECORDING, false) && p.getLong(KEY_SESSION_ID, 0) > 0;
     }
 
     public static boolean hasInterruptedRecording(Context context) {
-        SharedPreferences p = prefs(context);
-        return p.getBoolean(KEY_ENABLED, false)
-                && p.getBoolean(KEY_RECORDING, false)
-                && p.getLong(KEY_SESSION_ID, 0) > 0;
+        return isRecordingMarked(context);
     }
 
     public static long sessionId(Context context) {
@@ -43,7 +48,7 @@ public final class RecordingRecovery {
     }
 
     public static void markRecording(Context context, long sessionId, long startedAt) {
-        if (!isEnabled(context)) return;
+        if (sessionId <= 0) return;
         prefs(context).edit()
                 .putBoolean(KEY_RECORDING, true)
                 .putLong(KEY_SESSION_ID, sessionId)

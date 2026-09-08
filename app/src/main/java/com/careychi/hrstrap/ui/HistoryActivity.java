@@ -23,6 +23,10 @@ public final class HistoryActivity extends AppCompatActivity {
     @Override protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         buildUi();
+    }
+
+    @Override protected void onResume() {
+        super.onResume();
         load();
     }
 
@@ -58,11 +62,13 @@ public final class HistoryActivity extends AppCompatActivity {
     private void load() {
         dbExecutor.execute(() -> {
             List<RecordingSession> sessions = AppDatabase.get(getApplicationContext()).heartRateDao().getSessions();
-            main.post(() -> render(sessions));
+            long markedSessionId = RecordingRecovery.isRecordingMarked(getApplicationContext())
+                    ? RecordingRecovery.sessionId(getApplicationContext()) : 0;
+            main.post(() -> render(sessions, markedSessionId));
         });
     }
 
-    private void render(List<RecordingSession> sessions) {
+    private void render(List<RecordingSession> sessions, long markedSessionId) {
         list.removeAllViews();
         if (sessions.isEmpty()) {
             TextView empty = Ui.text(this, "还没有记录", 16, Ui.MUTED);
@@ -70,10 +76,12 @@ public final class HistoryActivity extends AppCompatActivity {
             list.addView(empty, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, Ui.dp(this, 180)));
             return;
         }
-        for (RecordingSession session : sessions) list.addView(sessionCard(session));
+        for (RecordingSession session : sessions) {
+            list.addView(sessionCard(session, session.id == markedSessionId));
+        }
     }
 
-    private View sessionCard(RecordingSession s) {
+    private View sessionCard(RecordingSession s, boolean activelyRecording) {
         LinearLayout card = Ui.column(this);
         card.setBackground(Ui.rounded(Ui.SURFACE, 20, this));
         Ui.pad(card, 16);
@@ -89,6 +97,13 @@ public final class HistoryActivity extends AppCompatActivity {
         date.setValue(dateFormat.format(new Date(s.startTimeMs)));
         header.addView(date);
         card.addView(header);
+
+        if (activelyRecording) {
+            TextView status = Ui.text(this, "正在持续记录中", 12, Ui.ACCENT);
+            status.setTypeface(android.graphics.Typeface.DEFAULT, android.graphics.Typeface.BOLD);
+            status.setPadding(0, Ui.dp(this, 6), 0, 0);
+            card.addView(status);
+        }
 
         LinearLayout row = Ui.row(this);
         row.setPadding(0, Ui.dp(this, 16), 0, 0);
